@@ -31,10 +31,12 @@ Program sequencing should live directly under the Composition as a `programSeque
 
 Programs should remain individually addressable sections. The Program Sequencer defines how those sections are normally ordered, when a section is considered complete, and which queued jumps or branching rules are allowed.
 
+Program sequencing is evaluated per Participant by default. A Composition can opt into shared progression behavior, but independent Participant Program cursors are the base case.
+
 This keeps the model flexible:
 
 - A simple piece can use a linear sequence.
-- A UI Device can queue a jump to a named Program.
+- A Voice-local UI Device can queue a jump to a named Program.
 - A Program can be reused in multiple places.
 - A Host can see and override the current sequence without editing the Program contents.
 - Future graph or playlist behavior can be added without changing the Program definition.
@@ -54,7 +56,10 @@ Example:
     ],
     "transitionPolicy": {
       "defaultBoundary": "patternLoopEnd",
-      "lateClientPolicy": "catchUpWithinWindow"
+      "lateClientPolicy": "compositionRule"
+    },
+    "programSyncPolicy": {
+      "mode": "independent"
     }
   }
 }
@@ -70,7 +75,6 @@ A Program is a named section of the Composition.
   "name": "Choose Group",
   "voices": [],
   "parameters": {},
-  "ui": [],
   "completion": {
     "type": "patternRepetitions",
     "sourceVoiceId": "voice-1",
@@ -91,7 +95,7 @@ Program completion can be controlled by:
 - a server or Composition flag
 - a rule based on Participant state
 
-Most transitions should occur at a quantized boundary, usually the end of the current Pattern loop.
+Most transitions should occur at a quantized boundary, usually the end of the current Pattern loop. Unless a shared progression policy is enabled, completion advances the local Participant Program cursor, not the entire room.
 
 ## Voices
 
@@ -130,7 +134,7 @@ Voice settings should be changeable per Program but easy to recall or inherit. T
 
 Use presets for sound, visual, and Voice behavior that should be reused exactly or with overrides.
 
-Use UI templates for interaction layouts and timing patterns that should be reused but commonly reworded or repointed.
+Use UI templates for Voice-local interaction layouts and timing patterns that should be reused but commonly reworded or repointed.
 
 Recommended preset groups:
 
@@ -168,7 +172,7 @@ Sampler Instruments should reference asset IDs, not raw paths. Preset slots can 
 
 ## UI-Driven Program Jumps
 
-A UI Device can queue a Program as the next Program by setting a runtime flag or Parameter.
+A Voice-local UI Device can queue a Program as the next Program for that Participant by setting a runtime flag or Parameter.
 
 Example:
 
@@ -184,6 +188,27 @@ Example:
 
 A UI Device should not usually hard-jump immediately unless the Composition marks the action as safe for immediate application. The default should be queued application at a musical boundary.
 
+## Positioning Scan Requests
+
+A Composition may request a fresh acoustic positioning scan as part of a Program. This is a compositional event: the artist can place it just before a movement that needs fresh room layout and can include silence or sparse audio to make the scan reliable.
+
+The Composition requests the scan; the server owns the exact chirp schedule, beacon slots, guard intervals, and fallback behavior.
+
+Example:
+
+```json
+{
+  "action": {
+    "type": "requestPositioningScan",
+    "scanProfile": "fresh-room-layout",
+    "applyAt": "patternLoopEnd",
+    "expectedDurationBeats": 4
+  }
+}
+```
+
+Clients should treat the scan window as a scheduled compositional section even though the infrastructure timing is server-coordinated.
+
 ## Random Values
 
 Random values can be allowed to remain random for early prototypes. For authored repeatability, the schema should eventually support seeded randomness.
@@ -196,4 +221,3 @@ Recommended future model:
 - Trig seed: derived from Pattern position.
 
 This allows a Composition to feel alive while still making bugs, rehearsals, and archived Performances easier to reproduce.
-

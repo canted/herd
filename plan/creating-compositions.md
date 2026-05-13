@@ -3,7 +3,7 @@ The user interface would be pretty influenced by Elektron sequencer devices, alt
 
 You would be able to add a Program to the composition to then add 1 to 4 voices to that program. Within a Voice, the UI will start to look like familiar electronic music devices. Each voice has one Pattern device, one Instrument device, one Visualizer device, and one UI device. A Pattern device is a sequencer like a step sequence or Euclidean generator. An Instrument is a sampler or a synth. 
 
-A Visualizer would look like an electronic music device and would take note-like input and create simple visuals like a wash of color, so the device would have parameters that affect how a color and shape is chosen, how this evolves per Cel (a single visualizer event) and throughout a Pattern, Program, Compsition, etc.
+A Visualizer would look like an electronic music device and would take note-like input and create simple visuals like a wash of color, so the device would have parameters that affect how HSBA color and shape are chosen, how this evolves per Cel (a single visualizer event) and throughout a Pattern, Program, Composition, etc.
 
 A UI device would allow you to create prompts and choices that feed back in to the composition. An example you would be able to say after this pattern has been going on for eight loops than this text would appear, and once cycle after that, these two buttons would appear. And we wouldn't need to be able to define what those buttons do they would affect the composition they might determine which voice is assigned to the current user. They might set another parameter, which then is used as a modifier on a Trig.
 

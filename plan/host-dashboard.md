@@ -80,13 +80,13 @@ It should include:
 
 - elapsed Performance time
 - Voice population
-- Program population histogram
+- Program cursor distribution
 - global flags
 - UI choice counts
 - positioning mode
 - active fallback mode
 
-The Host should be able to manually queue the next Program, force a Program, or allow the Composition to continue automatically.
+The Host should be able to manually queue or force a Program for all Participants or selected Participants when the Composition allows override. Normal operation should not assume every Participant shares one active Program.
 
 ## Participant View
 
@@ -95,7 +95,7 @@ The Participant view lists connected devices.
 Per Participant, show:
 
 - Participant ID or short label
-- current Program
+- local Program cursor
 - assigned Voice
 - clock sync quality
 - network quality
@@ -121,7 +121,7 @@ Recommended health groups:
 - positioning
 - server
 - assets
-- Program progression
+- Program progression for Compositions that opt into shared progression rules
 
 Each group should show:
 
@@ -143,7 +143,7 @@ Controls:
 - disable shaker sections
 - mute all clients if technically possible
 - force specific Program
-- restart current Program
+- restart selected Program cursor
 - broadcast reconnect instruction
 
 Emergency actions should be logged with Host ID and timestamp.
@@ -159,7 +159,7 @@ The dashboard should keep a compact event log:
 - calibration result
 - Performance start requested
 - start confirmed
-- Program changed
+- Program cursor changed
 - Host override
 - fallback mode entered
 - server health warning

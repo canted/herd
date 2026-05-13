@@ -96,8 +96,8 @@ Target behavior:
 
 - clients continue local playback temporarily
 - server restores Performance state from durable or replicated state if available
-- clients reconnect and report current Program, Voice, and transport estimate
-- server rebuilds histograms and health state
+- clients reconnect and report local Program cursor, Voice, and transport estimate
+- server rebuilds Program cursor distributions and health state
 
 For early prototypes, server restart may end the Performance. The production goal should be recovery.
 
@@ -118,7 +118,7 @@ Behavior:
 Impact:
 
 - network load increases
-- server histograms and broadcasts grow
+- server distributions and broadcasts grow
 - room audio may become too dense
 - Voice balance may be distorted
 
@@ -144,18 +144,21 @@ Behavior:
 - missing position is allowed
 - missing choices use defaults or current aggregate state
 
-## Missed Program Transition
+## Unexpected Program Divergence
 
 Impact:
 
-- client may lag behind the majority
+- only relevant when a Composition opts into lockstep or bounded-catch-up progression
+- a client may lag behind an expected Program boundary
 
 Behavior:
 
-- client reports current Program
-- server includes client in Program histogram
-- Composition catch-up rules decide whether to force forward
+- client reports local Program cursor
+- server includes client in Program cursor distribution
+- Composition catch-up rules decide whether to force forward if such rules are enabled
 - client transitions at next safe boundary
+
+For independent-cursor Compositions, Participants being in different Programs is expected behavior rather than a failure.
 
 ## Capability Mismatch
 
@@ -177,4 +180,3 @@ Behavior:
 - classify as ready, degraded, or blocked
 - expose in Host dashboard
 - use Composition-defined fallback where possible
-

@@ -6,7 +6,7 @@ This document defines how authored and runtime signals change device parameters.
 
 Herd should use an Elektron-like parameter-lock workflow with a Bitwig-like modulation interface.
 
-The author should be able to put a device in modulation mode, select a source, and press the targetting button to see which controls can be modulated. Each potential target should show the modulation amount, range, and source.
+The author should be able to put a device in modulation mode, select a source, and press the targeting button to see which controls can be modulated. Each potential target should show the modulation amount, range, and source.
 
 ## Parameter Locks
 
@@ -16,7 +16,7 @@ Example:
 
 - step 4 changes pitch
 - step 8 opens filter cutoff
-- step 12 changes Cel color
+- step 12 changes Cel HSBA color
 - step 16 triggers a UI prompt
 
 Parameter locks are event-local and should be evaluated when the Trig fires.
@@ -42,13 +42,17 @@ Examples:
 
 ## Parameter Types
 
+All Modulation Sources output a normalized float in the range `-1..1`.
+
+Targets remain typed. Each target Parameter defines how the incoming modulation value maps into its domain. This keeps modulation routing uniform while still allowing booleans, enums, HSBA colors, preset indexes, and references to behave correctly.
+
 Parameters should declare type and valid values:
 
 - `boolean`
 - `integer`
 - `float`
 - `enum`
-- `color`
+- `hsbaColor`
 - `assetRef`
 - `presetRef`
 - `programRef`
@@ -56,7 +60,13 @@ Parameters should declare type and valid values:
 - `duration`
 - `ratio`
 
-Modulation behavior should depend on type. A float can be scaled smoothly. An enum, preset, asset, or Voice assignment should usually be selected by index.
+Mapping behavior depends on the target type:
+
+- float targets interpolate across a min/max range
+- boolean targets use a threshold or polarity rule
+- enum, preset, asset, Program, and Voice targets map the float to an index
+- HSBA color targets expose hue, saturation, brightness, and alpha as separate modulatable channels
+- hue wraps circularly; saturation, brightness, and alpha clamp to their valid ranges
 
 ## Modulation Routing
 
@@ -98,7 +108,7 @@ Recommended policies:
 - `clamp`
 - `priority`
 
-The default should be additive for numeric values and priority-based for enums, preset indexes, and Program references.
+The default should be additive for numeric values and priority-based for enums, preset indexes, and Program references after the normalized modulation value has been mapped to the target domain.
 
 ## UI Choice As Modulation
 

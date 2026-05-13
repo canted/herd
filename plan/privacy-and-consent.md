@@ -87,7 +87,7 @@ If analytics are kept, the app should document exactly what is retained.
 The Host dashboard may show operational device state:
 
 - ready status
-- current Program
+- local Program cursor
 - Voice assignment
 - permission state
 - clock sync quality
@@ -118,4 +118,3 @@ Recommended safeguards:
 - server validates Composition package revisions
 - clients ignore messages from unknown sessions
 - uploaded measurements are scoped to one Performance
-

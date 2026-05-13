@@ -21,7 +21,7 @@ Possible assignment sources:
 - UI choice
 - random assignment
 - balanced random assignment
-- current Program rule
+- local Program rule
 - previous Program assignment
 - relative room position
 - Participant join order
@@ -62,10 +62,9 @@ The server should:
 - synchronize the new client's clock
 - send the full Composition package
 - send current Performance state
-- send current Program histogram
+- send Program cursor distribution
 - send current global flags
 
 The Composition then decides whether the Participant joins immediately, waits for the next loop, waits for the next Program, or remains in a holding behavior.
 
 If positioning data is unavailable, the Participant should have `position.state = "unlocated"` and continue with non-position-dependent behavior.
-

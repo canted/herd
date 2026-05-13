@@ -21,7 +21,7 @@ The server owns Performance-level truth:
 - start time
 - global transport state
 - current shared flags
-- Program population histogram
+- Program cursor distribution
 - calibration and positioning state
 - beacon assignment
 - emergency fallback mode
@@ -54,7 +54,7 @@ The Host owns session-level controls:
 - start Performance
 - stop Performance
 - force fallback mode
-- manually queue or force a Program
+- manually queue or force a Program for all or selected Participants
 - restart a failed phase
 - remove or ignore malfunctioning devices
 
@@ -108,13 +108,16 @@ UI choices may produce:
 
 ## Program Progression
 
-Program progression is primarily Composition logic evaluated by clients. The server can coordinate shared state by broadcasting aggregate facts.
+Program progression is primarily Composition logic evaluated by clients. By default, each Participant may progress independently through Programs while staying aligned to the shared clock.
 
-Example of a possible rule:
+The server can coordinate shared state by broadcasting aggregate facts, but it should not assume that Program divergence is a problem. Lockstep progression and bounded catch-up are opt-in Composition policies.
 
-- clients report `currentProgramId`
-- server broadcasts a Program histogram
-- clients use the histogram in progression rules
+Example of a possible bounded-catch-up rule:
+
+- the Composition sets `programSyncPolicy` to `boundedCatchUp`
+- clients report their local Program cursors
+- server broadcasts a Program cursor distribution
+- clients use the distribution in progression rules
 - if 75 percent of clients have passed a Program, lagging clients may be forced forward according to the Composition's catch-up rule
 
 The server may set global flags that affect progression, but the normal progression rules should remain visible in the Composition.
@@ -123,7 +126,7 @@ The server may set global flags that affect progression, but the normal progress
 
 Clients should periodically report:
 
-- current Program
+- local Program cursor
 - current Pattern loop
 - Voice assignment
 - transport offset estimate

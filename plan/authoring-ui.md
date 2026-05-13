@@ -21,6 +21,7 @@ The authoring app should have these primary areas:
 - Instrument editor
 - Visualizer editor
 - UI Device editor
+- Modulation mode
 - Asset manager
 - Performance preview
 
@@ -82,7 +83,6 @@ It should show:
 - Program duration or completion rule
 - active Voices
 - Program-level parameters
-- Program-level UI events
 - transition behavior
 - warnings for unresolved assets, missing Voices, or invalid modulation
 
@@ -174,7 +174,8 @@ Instrument parameters should be available for Trig locks and modulation routing.
 
 ## Modulation
 
-All Instruments abd Visualizers will have 4 modulators. Each modulator has:
+All Instruments and Visualizers will have 4 modulators. Each modulator outputs a normalized float in the range `-1..1` and has:
+
 - Modulation source selector
 - Modulation amount knob
 - A "target" button that will enable Modulation Mode for that device
@@ -195,9 +196,9 @@ The Visualizer editor defines local screen output.
 
 It should support:
 
-- background color
+- background HSBA color
 - Cel shape
-- Cel color
+- Cel HSBA color
 - intensity
 - duration
 - decay
@@ -212,6 +213,8 @@ The editor should preview both a single device and a simplified room grid.
 ## UI Device Editor
 
 The UI Device editor defines prompts and interactions that appear during a Program.
+
+UI Devices are Voice-local. To show the same prompt to multiple Voices, the author should copy the UI Device or use a shared UI template referenced by each Voice.
 
 It should support:
 
@@ -260,13 +263,13 @@ It should support:
 
 - simulate multiple Participants
 - assign simulated Participants to Voices
-- preview Program progression
+- preview independent and synchronized Program progression
 - preview UI choices
 - preview late join
 - preview no mic
 - preview no motion
 - preview unknown position
-- preview Program histogram
+- preview Program cursor distribution
 
 This is essential because many Herd behaviors only make sense across many devices.
 

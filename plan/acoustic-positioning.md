@@ -27,6 +27,10 @@ Default target: **coarse-to-good gallery positioning**, not survey-grade accurac
 - Refresh location periodically, not continuously.
   - Default scan interval: every **5-10 seconds**.
   - Default scan duration: **1-3 seconds**, depending on beacon count and room noise.
+- Allow Composition-triggered scan requests.
+  - A Composition can request a fresh scan before a movement that needs updated room layout.
+  - The artist should be able to leave silence or sparse audio around the scan window.
+  - The server still owns the exact chirp schedule, beacon slots, guard intervals, and fallback behavior.
 - Use **coded chirps** rather than simple tones.
   - Each beacon gets a unique ID encoded via spread-spectrum chirp, pseudo-random sequence, or frequency-swept signature.
   - Chirps should support cross-correlation detection in noise.
@@ -35,7 +39,7 @@ Default target: **coarse-to-good gallery positioning**, not survey-grade accurac
 ## Positioning Protocol
 
 - During each scan round:
-  - Server announces scan epoch, beacon list, chirp codes, and time slots.
+  - Server announces scan epoch, trigger source, beacon list, chirp codes, and time slots.
   - Beacons emit chirps in non-overlapping slots with guard intervals.
   - All devices record the full scan window.
   - Each listener detects chirp arrivals using cross-correlation against known beacon codes.
@@ -63,6 +67,20 @@ Default target: **coarse-to-good gallery positioning**, not survey-grade accurac
   - Choose effect axes from the solved point cloud, for example principal component axis 1 for a left-to-right sweep.
   - Broadcast effect start time plus per-device delay derived from its coordinate.
   - If a device lacks a fresh position, reuse last known good position with reduced confidence.
+
+## Composition-Triggered Positioning
+
+Positioning scans can be part of the artistic structure of a Composition. A later movement may need fresh position data for a sweep, ripple, or spatial call-and-response, so the Composition can request a scan shortly before that movement.
+
+The request is musical/compositional, but the scan execution is infrastructure-owned:
+
+- the Composition requests the scan and expected window
+- the server chooses participating Beacons
+- the server schedules exact chirp slots
+- clients follow the server scan schedule
+- the Composition reads the resulting position state when the next section begins
+
+This lets artists treat positioning as a visible or audible event in the piece while preserving the timing discipline needed for reliable acoustic measurement.
 
 ## Robustness Protocol For Noisy Chaotic Environments
 
@@ -170,4 +188,3 @@ Default target: **coarse-to-good gallery positioning**, not survey-grade accurac
 - Arbitrary rotation and mirror ambiguity are acceptable.
 - Position updates are periodic, not continuous.
 - Robustness is prioritized over maximum precision.
-
