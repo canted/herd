@@ -6,6 +6,23 @@ Let an artist build a room-scale participatory Composition without editing JSON 
 
 The authoring UI should feel closer to an electronic music workstation than a slide editor. The strongest interaction references from the planning docs are Elektron-style sequencing and parameter locks, plus Bitwig-style modulation visibility.
 
+## Visual Style Direction
+
+The preferred visual language is hybrid and tactile modern rather than fully skeuomorphic or fully flat. Wavea Flite is the strongest current reference: simplified controls with enough physical cues to feel playable, layered, and musical without becoming photorealistic hardware.
+
+Control styling should favor:
+
+- Simple tactile knobs, like Flite and not like a full SH-101 panel.
+- Knobs built from restrained concentric geometry, such as three circles with a clear detent or position stripe.
+- Subtle shadows and elevation cues that imply touchable depth, especially on the central knob surface, without heavy bevels, metallic textures, screws, or rack-panel realism.
+- Flat or graphic color fields or rings behind controls to show value and modulation feedback, closer to a graphic EQ or spectrum overlay than a literal backlit hardware part.
+- Sliders and buttons that share the same shallow physical layering: enough shadow, separation, and pressed/active states to read as controls, but with mostly flat surfaces and crisp labels.
+- Device panels that feel stacked and physical through spacing, shadows, borders, and z-order, while keeping the layout clean enough for dense authoring work.
+
+Waves OVox is a useful secondary reference near the upper edge of acceptable skeuomorphism. It has appealing dimensionality and instrument-like presence, but Herd should stop short of OVox when detail starts competing with fast editing, modulation visibility, validation, or dense sequencer state.
+
+Design should be "dark mode" as the performances will take place in dark rooms and all screens within the app should respect that room darkness.
+
 ## Primary Author Flow
 
 ```mermaid
@@ -168,7 +185,7 @@ Locks: pitch C3, velocity 92, filter cutoff +24, Cel brightness +0.3
 
 Step count should be configurable up to 64. The editor should preserve a stable 16-step row grouping so 64-step Patterns read as four rows rather than one long strip.
 
-A Pattern editor should have layer toggles for Instrument Triggers, Visualizer Triggers, and Parameter Locks. The Instrument Trigger and Visualizer Trigger toggles control whether the author is seeing and editing trigger data. If both trigger layers are off, the author is editing Parameter Locks.
+	A Pattern editor should have layer toggles for Instrument Triggers, Visualizer Triggers, and Parameter Locks. The Instrument Trigger and Visualizer Trigger toggles control whether the author is seeing and editing trigger data. If both trigger layers are off, the author is editing Parameter Locks.
 
 A Step Event is the sequencer-step object with authored data. It can contain an Instrument Trigger, a Visualizer Trigger, both, or neither. Instrument and Visualizer devices define defaults; Step Event Parameter Locks override those defaults for the selected event. Parameter-only Step Events are valid and useful for changing parameters at a musical time without creating a note or visual Cel.
 
