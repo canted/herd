@@ -1,0 +1,246 @@
+{
+  "schemaVersion": "0.1.0",
+  "id": "rehearsal-basic",
+  "name": "Rehearsal Basic",
+  "metadata": {
+    "description": "Minimal fixture for the first Herd rehearsal vertical slice."
+  },
+  "assets": [
+    {
+      "id": "sample-soft-click",
+      "type": "audio",
+      "path": "samples/soft-click.wav",
+      "hash": "sha256-placeholder-soft-click",
+      "durationMs": 120
+    }
+  ],
+  "presets": {},
+  "parameters": {},
+  "programSequencer": {
+    "mode": "linear",
+    "initialProgramId": "intro-pulse",
+    "steps": [
+      {
+        "programId": "intro-pulse"
+      },
+      {
+        "programId": "choice-branch"
+      }
+    ],
+    "transitionPolicy": {
+      "defaultBoundary": "patternLoopEnd",
+      "lateClientPolicy": "compositionRule"
+    },
+    "programSyncPolicy": {
+      "mode": "independent"
+    }
+  },
+  "programs": [
+    {
+      "id": "intro-pulse",
+      "name": "Intro Pulse",
+      "voices": [
+        {
+          "id": "voice-green",
+          "name": "Green Voice",
+          "pattern": {
+            "id": "pattern-green-pulse",
+            "type": "stepSequencer",
+            "stepCount": 16,
+            "tempoBpm": 120,
+            "stepDurationBeats": 0.25,
+            "repetitions": 2,
+            "stepEvents": [
+              {
+                "step": 0,
+                "instrumentTrigger": {
+                  "enabled": true,
+                  "durationMs": 180
+                },
+                "visualizerTrigger": {
+                  "enabled": true,
+                  "durationMs": 250
+                },
+                "parameterLocks": {
+                  "instrument": {
+                    "pitch": "C3",
+                    "velocity": 92
+                  },
+                  "visualizer": {
+                    "shape": "ring",
+                    "saturation": 0.7
+                  }
+                }
+              },
+              {
+                "step": 4,
+                "visualizerTrigger": {
+                  "enabled": true,
+                  "durationMs": 180
+                },
+                "parameterLocks": {
+                  "visualizer": {
+                    "shape": "bar",
+                    "decayMs": 180
+                  }
+                }
+              },
+              {
+                "step": 8,
+                "instrumentTrigger": {
+                  "enabled": true,
+                  "durationMs": 220
+                },
+                "parameterLocks": {
+                  "instrument": {
+                    "pitch": "G3",
+                    "filter.cutoff": 0.58
+                  }
+                }
+              },
+              {
+                "step": 12,
+                "parameterLocks": {
+                  "instrument": {
+                    "filter.cutoff": 0.72
+                  },
+                  "visualizer": {
+                    "saturation": 1
+                  }
+                }
+              }
+            ]
+          },
+          "instrument": {
+            "id": "instrument-green-sh101",
+            "type": "polySh101",
+            "defaults": {
+              "pitch": "C3",
+              "velocity": 84,
+              "durationMs": 180,
+              "oscillator": {
+                "saw": true,
+                "pulse": true,
+                "sub": true,
+                "noise": 0.05,
+                "pulseWidth": 0.5
+              },
+              "filter": {
+                "cutoff": 0.42,
+                "resonance": 0.2
+              },
+              "envelope": {
+                "attackMs": 5,
+                "decayMs": 120,
+                "sustain": 0.35,
+                "releaseMs": 90
+              }
+            }
+          },
+          "visualizer": {
+            "id": "visualizer-green-wash",
+            "type": "colorWash",
+            "defaults": {
+              "hue": 140,
+              "saturation": 0.62,
+              "brightness": 0.7,
+              "shape": "wash",
+              "decayMs": 260
+            }
+          }
+        }
+      ],
+      "completion": {
+        "type": "patternRepetitions",
+        "sourceVoiceId": "voice-green",
+        "repetitions": 2,
+        "onComplete": {
+          "type": "advance"
+        }
+      }
+    },
+    {
+      "id": "choice-branch",
+      "name": "Choice Branch",
+      "voices": [
+        {
+          "id": "voice-choice",
+          "name": "Choice Voice",
+          "pattern": {
+            "id": "pattern-choice-hold",
+            "type": "stepSequencer",
+            "stepCount": 8,
+            "tempoBpm": 90,
+            "stepDurationBeats": 0.5,
+            "repetitions": 1,
+            "stepEvents": [
+              {
+                "step": 0,
+                "visualizerTrigger": {
+                  "enabled": true,
+                  "durationMs": 400
+                },
+                "parameterLocks": {
+                  "visualizer": {
+                    "shape": "pulse",
+                    "brightness": 0.9
+                  }
+                }
+              }
+            ]
+          },
+          "instrument": {
+            "id": "instrument-choice-sh101",
+            "type": "polySh101",
+            "defaults": {
+              "pitch": "A3",
+              "velocity": 70,
+              "durationMs": 160,
+              "filter": {
+                "cutoff": 0.35,
+                "resonance": 0.18
+              }
+            }
+          },
+          "visualizer": {
+            "id": "visualizer-choice-wash",
+            "type": "colorWash",
+            "defaults": {
+              "hue": 210,
+              "saturation": 0.55,
+              "brightness": 0.62,
+              "shape": "wash",
+              "decayMs": 300
+            }
+          },
+          "ui": {
+            "id": "ui-choice-path",
+            "type": "choicePrompt",
+            "prompt": {
+              "id": "prompt-path",
+              "text": "Choose a path",
+              "applyBoundary": "patternLoopEnd",
+              "choices": [
+                {
+                  "id": "choice-left",
+                  "label": "Left",
+                  "targetProgramId": "intro-pulse"
+                },
+                {
+                  "id": "choice-right",
+                  "label": "Right",
+                  "targetProgramId": "choice-branch"
+                }
+              ]
+            }
+          }
+        }
+      ],
+      "completion": {
+        "type": "uiChoice",
+        "sourceVoiceId": "voice-choice"
+      }
+    }
+  ],
+  "defaults": {}
+}
