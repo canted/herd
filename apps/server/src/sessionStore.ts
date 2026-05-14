@@ -1,3 +1,4 @@
+import type { Composition } from "@herd/composition";
 import {
   summarizeReadiness,
   type ChoiceSnapshot,
@@ -15,6 +16,7 @@ export interface SessionRecord {
   name: string;
   phase: SessionPhase;
   fixtureId: string;
+  composition: Composition;
   createdAt: number;
   transportStartTimeMs?: number;
   participants: Map<string, ParticipantSnapshot>;
@@ -25,6 +27,7 @@ export interface SessionRecord {
 export interface CreateSessionInput {
   name: string;
   fixtureId?: string;
+  composition: Composition;
 }
 
 export class SessionStore {
@@ -39,7 +42,8 @@ export class SessionStore {
       code,
       name: input.name.trim() || "Herd rehearsal",
       phase: "lobby",
-      fixtureId: input.fixtureId ?? "rehearsal-basic",
+      fixtureId: input.fixtureId ?? input.composition.id,
+      composition: input.composition,
       createdAt: now,
       participants: new Map(),
       choices: new Map(),

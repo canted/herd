@@ -35,6 +35,7 @@ export interface RuntimeParameterLocksEvent extends RuntimeStepEventBase {
 
 export interface RuntimeInstrumentEvent extends RuntimeStepEventBase {
   type: "instrument";
+  instrumentType: ProgramVoice["instrument"]["type"];
   parameters: ParameterBag;
   durationMs?: number;
 }
@@ -196,6 +197,7 @@ function buildVoiceTimeline(
         const instrumentEvent: RuntimeInstrumentEvent = {
           ...base,
           type: "instrument",
+          instrumentType: voice.instrument.type,
           parameters: applyParameterLocks(voice.instrument.defaults, stepEvent.parameterLocks?.instrument),
         };
 

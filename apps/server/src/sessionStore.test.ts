@@ -1,10 +1,14 @@
 import { describe, expect, it } from "vitest";
+import type { Composition } from "@herd/composition";
 import { SessionStore } from "./sessionStore";
+import fixture from "../../../packages/composition/fixtures/rehearsal-basic.json";
+
+const composition = fixture as unknown as Composition;
 
 describe("SessionStore", () => {
   it("creates a blocked lobby until participants join and report readiness", () => {
     const store = new SessionStore();
-    const created = store.createSession({ name: "Gallery test" }, 1000);
+    const created = store.createSession({ name: "Gallery test", composition }, 1000);
 
     expect(created.phase).toBe("lobby");
     expect(created.readiness.status).toBe("blocked");
@@ -44,7 +48,7 @@ describe("SessionStore", () => {
 
   it("schedules start, records choices, and stops", () => {
     const store = new SessionStore();
-    const created = store.createSession({ name: "Run" }, 2000);
+    const created = store.createSession({ name: "Run", composition }, 2000);
     const started = store.startSession(created.code, 2500, 3000);
 
     expect(started.phase).toBe("live");

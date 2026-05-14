@@ -1,0 +1,21 @@
+{
+  "name": "@herd/positioning-lab",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host 0.0.0.0 --port 5176",
+    "build": "vite build",
+    "preview": "vite preview --host 0.0.0.0 --port 4176"
+  },
+  "dependencies": {
+    "lucide-react": "^1.16.0",
+    "qrcode": "^1.5.4",
+    "react": "^19.2.6",
+    "react-dom": "^19.2.6"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-react": "^6.0.2",
+    "vite": "^8.0.13"
+  }
+}

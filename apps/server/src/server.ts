@@ -79,7 +79,12 @@ async function handleRequest(request: IncomingMessage, response: ServerResponse)
     if (request.method === "POST" && url.pathname === "/api/sessions") {
       const body = await readJsonBody(request);
       const name = typeof body.name === "string" ? body.name : "Herd rehearsal";
-      const snapshot = store.createSession({ name, fixtureId: "rehearsal-basic" });
+      const composition = parseSessionComposition(body.composition);
+      const snapshot = store.createSession({
+        name,
+        fixtureId: composition.id,
+        composition,
+      });
       const payload: CreateSessionResponse = {
         snapshot,
         hostPath: `/host?code=${snapshot.code}`,
@@ -133,7 +138,10 @@ function handleSocket(ws: WebSocket, request: IncomingMessage, url: URL): void {
     store.joinParticipant(code, participantId);
   }
 
-  send(ws, { type: "fixture", composition: fixture });
+  const session = store.getSession(code);
+  if (session !== undefined) {
+    send(ws, { type: "fixture", composition: session.composition });
+  }
   send(ws, { type: "snapshot", snapshot: store.snapshotByCode(code) });
   broadcastSnapshot(code);
 
@@ -263,6 +271,19 @@ function loadFixture(): Composition {
 
   if (!result.ok) {
     throw new Error(`Fixture validation failed: ${JSON.stringify(result.issues, null, 2)}`);
+  }
+
+  return result.value;
+}
+
+function parseSessionComposition(input: unknown): Composition {
+  if (input === undefined) {
+    return fixture;
+  }
+
+  const result = validateComposition(input);
+  if (!result.ok) {
+    throw new Error(`Composition validation failed: ${result.issues[0]?.message ?? "Invalid Composition."}`);
   }
 
   return result.value;

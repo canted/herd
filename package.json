@@ -5,10 +5,12 @@
   "type": "module",
   "packageManager": "pnpm@10.28.2",
   "scripts": {
-    "dev": "concurrently -n server,host,participant -c cyan,green,magenta \"pnpm --filter @herd/server dev\" \"pnpm --filter @herd/host dev\" \"pnpm --filter @herd/participant dev\"",
+    "dev": "concurrently -n server,host,participant,authoring,positioning -c cyan,green,magenta,yellow,blue \"pnpm --filter @herd/server dev\" \"pnpm --filter @herd/host dev\" \"pnpm --filter @herd/participant dev\" \"pnpm --filter @herd/authoring dev\" \"pnpm --filter @herd/positioning-lab dev\"",
     "dev:server": "pnpm --filter @herd/server dev",
     "dev:host": "pnpm --filter @herd/host dev",
     "dev:participant": "pnpm --filter @herd/participant dev",
+    "dev:authoring": "pnpm --filter @herd/authoring dev",
+    "dev:positioning": "pnpm --filter @herd/positioning-lab dev",
     "build": "pnpm -r --if-present build",
     "test": "vitest run",
     "typecheck": "tsc --noEmit",

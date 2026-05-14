@@ -59,6 +59,7 @@ describe("buildRuntimeTimeline", () => {
 
     expect(instrumentEvent?.type).toBe("instrument");
     if (instrumentEvent?.type === "instrument") {
+      expect(instrumentEvent.instrumentType).toBe("polySh101");
       expect(instrumentEvent.parameters.pitch).toBe("G3");
       expect(instrumentEvent.parameters.filter).toEqual({
         cutoff: 0.58,

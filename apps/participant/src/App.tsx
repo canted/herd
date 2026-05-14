@@ -11,7 +11,12 @@ import {
   skipStaleEvents,
   type RuntimeTimelineEvent,
 } from "@herd/runtime";
-import { playSynthEvent } from "./audio";
+import {
+  getRequiredSamplerAssetIds,
+  loadEmbeddedAudioAssets,
+  playSamplerEvent,
+  playSynthEvent,
+} from "./audio";
 
 const serverBase = import.meta.env.VITE_SERVER_URL ?? "http://localhost:8787";
 
@@ -48,6 +53,7 @@ export function App() {
   const [error, setError] = useState<string | null>(null);
   const wsRef = useRef<WebSocket | null>(null);
   const audioRef = useRef<AudioContext | null>(null);
+  const audioAssetsRef = useRef<Map<string, AudioBuffer>>(new Map());
   const clockRef = useRef<ClockQuality | null>(null);
   const compositionRef = useRef<Composition | null>(null);
   const participantId = useMemo(getParticipantId, []);
@@ -181,8 +187,7 @@ export function App() {
   function handleServerMessage(message: ServerToClientMessage) {
     switch (message.type) {
       case "fixture": {
-        setComposition(message.composition);
-        setAssetStatus("loaded");
+        void loadSessionAssets(message.composition);
         return;
       }
       case "snapshot": {
@@ -240,6 +245,28 @@ export function App() {
     }
   }
 
+  async function loadSessionAssets(nextComposition: Composition) {
+    setComposition(nextComposition);
+    setAssetStatus("unknown");
+
+    const context = audioRef.current;
+    if (context === null) {
+      setAssetStatus("failed");
+      return;
+    }
+
+    try {
+      const buffers = await loadEmbeddedAudioAssets(context, nextComposition);
+      const missingSamplerAssets = getRequiredSamplerAssetIds(nextComposition)
+        .filter((assetId) => !buffers.has(assetId));
+      audioAssetsRef.current = buffers;
+      setAssetStatus(missingSamplerAssets.length === 0 ? "loaded" : "failed");
+    } catch {
+      audioAssetsRef.current = new Map();
+      setAssetStatus("failed");
+    }
+  }
+
   function scheduleComposition(nextComposition: Composition, transportStartTimeMs: number) {
     clearScheduledEvents();
     const context = audioRef.current;
@@ -259,7 +286,11 @@ export function App() {
       const audioWhen = context.currentTime + Math.max(delayMs, 0) / 1000;
 
       if (event.type === "instrument") {
-        playSynthEvent(context, audioWhen, event.parameters, event.durationMs);
+        if (event.instrumentType === "sampler") {
+          playSamplerEvent(context, audioWhen, event.parameters, event.durationMs, audioAssetsRef.current);
+        } else {
+          playSynthEvent(context, audioWhen, event.parameters, event.durationMs);
+        }
       }
 
       if (event.type === "visualizer") {

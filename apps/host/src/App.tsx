@@ -84,13 +84,22 @@ export function App() {
     const socket = new WebSocket(`${toWsBase(serverBase)}/ws?role=host&code=${encodeURIComponent(code)}`);
     wsRef.current = socket;
 
-    socket.addEventListener("open", () => setConnectionState("connected"));
-    socket.addEventListener("close", () => setConnectionState("offline"));
+    socket.addEventListener("open", () => {
+      if (wsRef.current !== socket) return;
+      setConnectionState("connected");
+      setError(null);
+    });
+    socket.addEventListener("close", () => {
+      if (wsRef.current !== socket) return;
+      setConnectionState("offline");
+    });
     socket.addEventListener("error", () => {
+      if (wsRef.current !== socket) return;
       setConnectionState("error");
       setError("Host socket failed.");
     });
     socket.addEventListener("message", (event) => {
+      if (wsRef.current !== socket) return;
       const message = JSON.parse(event.data as string) as ServerToClientMessage;
       if (message.type === "snapshot") {
         setSnapshot(message.snapshot);

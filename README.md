@@ -2,10 +2,12 @@
 
 Herd is a web-based rehearsal prototype for synchronized phone-as-sound-and-light performances.
 
-This repo currently implements the fixture-driven rehearsal vertical slice:
+This repo currently implements the rehearsal vertical slice plus browser-based Composition authoring:
 
 - Host dashboard for creating a session, showing a QR/link, monitoring readiness, starting, stopping, forcing holding, and reviewing logs.
 - Participant mobile client for joining, unlocking audio, syncing clock, running the fixture, showing visuals, submitting a choice, recovering, and ending.
+- Authoring app for creating/editing Compositions, Programs, Voices, Step Events, Parameter Locks, device defaults, UI prompts, asset references, sampler zones, JSON files, and `.herd.zip` packages with media assets.
+- Sonic Positioning Lab prototype for role assignment, chirp profile selection, simulated scan evidence, relative layout preview, and evidence export.
 - In-memory Node/WebSocket server for session coordination.
 - Shared Composition, runtime, and protocol packages.
 
@@ -24,24 +26,41 @@ When `pnpm dev` is running:
 
 - Host: http://localhost:5173
 - Participant: http://localhost:5174
+- Authoring: http://localhost:5175
+- Positioning Lab: http://localhost:5176
 - Server health: http://localhost:8787/health
+
+## Authoring Packages
+
+Use Export Package to download a `.herd.zip` archive containing:
+
+- `composition.json`
+- media files referenced by the Composition assets
+
+Use Import Package to restore the archive into local authoring state. Imported package media is rehydrated for rehearsal launch and Participant sampler playback.
+
+## Positioning Lab
+
+The Positioning Lab is a standalone controller prototype for acoustic positioning tests. It supports device labels and roles, chirp profiles, simulated scans, approximate relative layout preview, and JSON evidence export.
 
 ## Rehearsal Flow
 
-1. Open the Host URL.
-2. Create a session.
-3. Open the Participant URL from the QR code or join link.
+1. Open the Authoring URL and edit or create a Composition.
+2. Use Open rehearsal to create a session from the active Composition.
+3. Open the Participant URL from the Host QR code or join link.
 4. Tap Begin on the Participant client to unlock audio.
 5. Wait for Host readiness to become ready or degraded.
 6. Start from the Host dashboard.
-7. The Participant runs the fixture, plays scheduled synth events, displays visuals, and shows one choice prompt.
+7. The Participant runs the authored Composition, plays scheduled synth events, displays visuals, and shows choice prompts.
 8. Submit a Participant choice and confirm Host choice counts/logs update.
 9. Stop from the Host dashboard.
 
 ## Current Limits
 
 - Sessions are in memory only.
-- The fixture references placeholder asset metadata; actual asset download/decode is still future work.
-- Audio is Web Audio V1 with a minimal SH-101-style synth path, not the full instrument engine.
+- Authoring saves to browser local storage and exports JSON; server-side persistence is not implemented.
+- Authoring supports local `.herd.zip` package archives; server-side package uploads and account asset libraries are not implemented.
+- Participant runtime plays the minimal polyphonic SH-101-style synth path and embedded sampler audio zones; the full instrument engine is not implemented.
 - The Host and Participant apps are rehearsal-only and not public deployment-ready.
-- Authoring, acoustic positioning, account management, and public safety review are still out of scope.
+- The Positioning Lab uses simulated scan evidence only; real acoustic chirp emission, microphone capture, correlation, and physical accuracy validation still require real devices.
+- Account management and public safety review are still out of scope.
