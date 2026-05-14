@@ -10,7 +10,7 @@ Default target: **coarse-to-good gallery positioning**, not survey-grade accurac
 
 ## System Design
 
-- Use a **web app** with microphone permission, Web Audio, and a WASM/audio-worklet timing engine.
+- Use a **web app** with microphone permission and Web Audio. The audio engine variant is defined in `audio-engine.md`; early positioning work should validate targeted Worker/WASM or AudioWorklet kernels before requiring a full WASM engine.
 - Use a central coordination server over WebSocket/WebRTC data channel for:
   - session membership
   - beacon selection

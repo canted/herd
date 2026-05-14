@@ -170,6 +170,8 @@ Examples:
 
 - no Web Audio support
 - no AudioWorklet support
+- no WASM support for an optional engine kernel
+- no SharedArrayBuffer or cross-origin isolation when a feature requires shared memory
 - no motion permission
 - no wake lock
 - unsupported browser

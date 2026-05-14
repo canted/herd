@@ -44,6 +44,12 @@ An Instrument is the sound-producing device for a Voice. It may be a sampler, sy
 
 An Instrument has authored parameters, optional sample or wavetable assets, and a runtime state. It receives Trigs and modulation values, then produces local audio on the Participant device.
 
+## Audio Engine
+
+The Audio Engine is the client-side implementation that turns Instrument state, Trigs, assets, and modulation into local sound.
+
+The Composition should remain engine-agnostic. A device may use native Web Audio, targeted WASM kernels, or a future full WASM engine depending on capability and Performance policy.
+
 ## Visualizer
 
 A Visualizer is the screen-output device for a Voice. It receives Cels, note-like events, modulation values, and optional positioning data, then renders visual output on the Participant device. It has base settings for HSBA color, shape, intensity, duration, motion, decay, screen placement, and how the event should evolve over a single trigger or across a Pattern or freely over time.
