@@ -24,29 +24,37 @@ A Voice owns the local device behavior for assigned Participants: Pattern conten
 
 A Pattern is the time-based event generator for a Voice. It may be a step sequencer, Euclidean generator, shaker, or another generator type.
 
-A Pattern produces Trigs over time. It defines loop length, tempo relationship, quantization, repetition count, and completion behavior. At the end of a Pattern loop or Pattern run, it may request Program progression, apply queued UI choices, or update modulation values.
+A Pattern produces Step Events over time. It defines loop length, tempo relationship, quantization, repetition count, and completion behavior. At the end of a Pattern loop or Pattern run, it may request Program progression, apply queued UI choices, or update modulation values.
 
-## Trig
+## Step Event
 
-A Trig is a scheduled event emitted by a Pattern. It is the smallest authored musical/visual/control event.
+A Step Event is the scheduled sequencer-step object emitted by a Pattern. It is the smallest authored musical/visual/control event in the step sequencer.
 
-A Trig can carry note parameters, Instrument parameter locks, Visualizer event data, UI event data, and modulation changes. A Trig is evaluated locally by the client against the current clock, Voice assignment, and active modulation state.
+A Step Event can contain an Instrument Trigger, a Visualizer Trigger, both, or neither. It can also carry Parameter Locks for Instrument and/or Visualizer values. Instrument and Visualizer devices provide default values; Step Event Parameter Locks override those defaults for a single event. A Parameter-only Step Event with no Instrument Trigger and no Visualizer Trigger is valid when the Composition needs to change parameters at a scheduled step without producing a note or Cel. A Step Event is evaluated locally by the client against the current clock, Voice assignment, and active modulation state.
+
+## Instrument Trigger
+
+An Instrument Trigger is the part of a Step Event that sends an Instrument Sounding Event. It is roughly equivalent to MIDI Note On and may use default Instrument values or Step Event Parameter Locks for pitch, velocity, duration, envelope, filter, or other Instrument parameters.
+
+## Visualizer Trigger
+
+A Visualizer Trigger is the part of a Step Event that sends a Visualizer Display Event. It is the visual equivalent of Note On and may use default Visualizer values or Step Event Parameter Locks for Cel shape, color, saturation, decay, placement, motion, or other Visualizer parameters.
 
 ## Cel
 
 A Cel is a visual event for a Visualizer. It is the visual equivalent of a note-like event.
 
-A Cel may define parameter locks for HSBA color, shape, intensity, duration, motion, decay, screen placement, and how the event should evolve over a single trigger or across a Pattern or freely over time. A Cel can be generated directly by a Trig or derived from note and modulation data.
+A Cel may define parameter locks for HSBA color, shape, intensity, duration, motion, decay, screen placement, and how the event should evolve over a single trigger or across a Pattern or freely over time. A Cel can be generated directly by a Visualizer Trigger or derived from note and modulation data.
 
 ## Instrument
 
-An Instrument is the sound-producing device for a Voice. It may be a sampler, synth, noise source, effect chain, or composite device.
+An Instrument is the sound-producing device for a Voice. It may be a sampler, polyphonic SH-101-style synth, noise source, effect chain, or composite device.
 
-An Instrument has authored parameters, optional sample or wavetable assets, and a runtime state. It receives Trigs and modulation values, then produces local audio on the Participant device.
+An Instrument has authored parameters, optional sample or wavetable assets, and a runtime state. It receives Instrument Triggers, Parameter Locks, and modulation values, then produces local audio on the Participant device. The initial synth model should be a polyphonic SH-101-style subtractive synth: simple, direct controls inspired by the Roland SH-101, but able to play overlapping notes when a Pattern requires polyphony.
 
 ## Audio Engine
 
-The Audio Engine is the client-side implementation that turns Instrument state, Trigs, assets, and modulation into local sound.
+The Audio Engine is the client-side implementation that turns Instrument state, Instrument Triggers, assets, Parameter Locks, and modulation into local sound.
 
 The Composition should remain engine-agnostic. A device may use native Web Audio, targeted WASM kernels, or a future full WASM engine depending on capability and Performance policy.
 
@@ -88,7 +96,7 @@ Beacons are selected by the server and should usually be stationary or semi-stat
 
 ## Parameter
 
-A Parameter is an addressable value that can affect device behavior. Parameters may belong to a Composition, Program, Voice, Pattern, Trig, Instrument, Visualizer, UI Device, Participant, or Performance.
+A Parameter is an addressable value that can affect device behavior. Parameters may belong to a Composition, Program, Voice, Pattern, Step Event, Instrument, Visualizer, UI Device, Participant, or Performance.
 
 Parameters have types, ranges, defaults, and rules for when changes take effect. A Parameter can be directly authored, changed by UI, changed by the server, or modified by one or more Modulation Sources.
 

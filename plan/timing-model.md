@@ -83,7 +83,7 @@ The default for UI-driven choices and Program jumps should be `patternLoopEnd`.
 
 A Pattern defines:
 
-- step count
+- step count, up to 64 for the initial step sequencer
 - step duration or tempo relationship
 - loop duration
 - repetition count

@@ -169,6 +169,19 @@ Logs are useful during rehearsal and for diagnosing installation problems.
 
 ## Readiness Rules
 
+Host readiness is the dashboard's pre-start classification of whether the current Performance can begin with the selected Composition and connected Participants.
+
+It combines:
+
+- Composition warnings and blocking errors
+- Participant count against expected/minimum/maximum counts
+- asset load and decode status
+- clock sync quality
+- audio unlock status
+- required microphone, motion, and capability status
+- calibration and positioning quality when required
+- active fallback policy
+
 Before start, the dashboard should classify readiness:
 
 - `ready`: enough clients have assets, clock sync, audio unlock, and required permissions
@@ -176,6 +189,8 @@ Before start, the dashboard should classify readiness:
 - `blocked`: start would likely fail
 
 The Host can override degraded state. Blocked state should require an explicit override with a warning.
+
+Readiness should not only be raw counts. It should also show the top blockers, the audience-visible impact, and the recommended Host action.
 
 ## Design Direction
 

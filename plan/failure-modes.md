@@ -27,7 +27,7 @@ Behavior:
 
 Impact:
 
-- shaker Pattern cannot produce motion Trigs
+- shaker Pattern cannot produce motion Step Events
 - motion-based modulation is unavailable
 
 Behavior:

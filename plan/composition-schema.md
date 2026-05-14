@@ -130,6 +130,47 @@ Voice settings should be changeable per Program but easy to recall or inherit. T
 }
 ```
 
+## Patterns And Step Events
+
+The initial step sequencer Pattern should allow a configurable `stepCount` up to 64. Authoring can display those steps in 16-step rows, but the saved model should store the actual step count and Step Event positions.
+
+Recommended Step Event shape:
+
+```json
+{
+  "step": 3,
+  "instrumentTrigger": {
+    "enabled": true
+  },
+  "visualizerTrigger": {
+    "enabled": false
+  },
+  "parameterLocks": {
+    "instrument": {
+      "pitch": "C3",
+      "velocity": 92,
+      "filter.cutoff": 0.64
+    },
+    "visualizer": {
+      "cel.brightness": 0.3
+    }
+  }
+}
+```
+
+Instrument and Visualizer devices define their own default values. Step Event Parameter Locks override those defaults for a single event.
+
+A Step Event can contain:
+
+- an Instrument Trigger, which sends an Instrument Sounding Event
+- a Visualizer Trigger, which sends a Visualizer Display Event
+- both an Instrument Trigger and a Visualizer Trigger
+- neither trigger
+
+A Step Event with no Instrument Trigger and no Visualizer Trigger is valid if it carries Parameter Locks. This supports Parameter-only steps that change parameters without producing a note or visual Cel.
+
+The initial synth Instrument type should model a polyphonic SH-101-style subtractive synth. The schema should express the synth as typed parameters and presets, not as implementation-specific Web Audio node choices.
+
 ## Presets And Templates
 
 Use presets for sound, visual, and Voice behavior that should be reused exactly or with overrides.
@@ -218,6 +259,6 @@ Recommended future model:
 - Composition seed: stable across rehearsals or exports.
 - Performance seed: chosen when a Performance starts.
 - Participant seed: derived from Performance seed and Participant ID.
-- Trig seed: derived from Pattern position.
+- Step Event seed: derived from Pattern position.
 
 This allows a Composition to feel alive while still making bugs, rehearsals, and archived Performances easier to reproduce.

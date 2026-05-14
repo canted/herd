@@ -6,7 +6,7 @@ This document defines which parts of a Performance are controlled by the server,
 
 Clients should execute the Composition locally. The server should synchronize clocks, distribute state, collect health reports, and coordinate shared decisions.
 
-The server should not schedule every Trig. Herd depends on many devices producing tightly timed local audio and visuals, so clients need enough Composition data and clock information to keep playing even when the network is temporarily poor.
+The server should not schedule every Step Event. Herd depends on many devices producing tightly timed local audio and visuals, so clients need enough Composition data and clock information to keep playing even when the network is temporarily poor.
 
 ## Server Authority
 

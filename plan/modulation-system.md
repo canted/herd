@@ -6,20 +6,51 @@ This document defines how authored and runtime signals change device parameters.
 
 Herd should use an Elektron-like parameter-lock workflow with a Bitwig-like modulation interface.
 
-The author should be able to put a device in modulation mode, select a source, and press the targeting button to see which controls can be modulated. Each potential target should show the modulation amount, range, and source.
+Modulation Mode belongs to target-owning devices: Instruments and Visualizers. The author should be able to put an Instrument or Visualizer in Modulation Mode, select a source, and press the targeting button to see which controls on that device can be modulated. Each potential target should show the modulation amount, range, and source.
 
-## Parameter Locks
+## Step Events And Parameter Locks
 
-A Trig can lock one or more Parameters for that event.
+A Step Event is the sequencer-step object that stores authored data. It can contain:
+
+- an Instrument Trigger, which sends an Instrument Sounding Event, roughly equivalent to MIDI Note On
+- a Visualizer Trigger, which sends a Visualizer Display Event, the visual equivalent of Note On
+- Parameter Locks for the Instrument and/or Visualizer
+
+A Step Event can lock one or more Parameters for that event.
 
 Example:
 
 - step 4 changes pitch
 - step 8 opens filter cutoff
 - step 12 changes Cel HSBA color
-- step 16 triggers a UI prompt
+- step 16 sends an Instrument Trigger and a Visualizer Trigger
 
-Parameter locks are event-local and should be evaluated when the Trig fires.
+Parameter locks are event-local and should be evaluated when the Step Event fires.
+
+Instrument and Visualizer devices define default values. A Step Event can override those defaults for one event by locking pitch, velocity, duration, filter cutoff, Cel shape, saturation, decay, or any other exposed Parameter.
+
+A Step Event can independently contain:
+
+- an Instrument Trigger
+- a Visualizer Trigger
+- both an Instrument Trigger and a Visualizer Trigger
+- neither trigger
+
+A Parameter-only Step Event is valid. In that case, the Step Event changes one or more Parameters at a scheduled step without sending an Instrument Sounding Event or a Visualizer Display Event.
+
+## Step Event Lock Capture
+
+The authoring UI should support lock capture for fast Elektron-style editing:
+
+1. The author selects a Step Event.
+2. The author chooses to create a new lock.
+3. The next touched or modified control on the Instrument or Visualizer is captured as the lock target.
+4. The edited value becomes the Step Event's locked value.
+5. The target control displays that the selected Step Event owns a lock for it.
+
+This keeps parameter-lock creation tactile and avoids making the author search through long parameter-address menus for common edits.
+
+Step Events do not have Modulation Mode. The Step Event editor has Lock Capture only. Modulation Mode belongs to Instruments and Visualizers because they own the controls that can become modulation targets.
 
 ## Continuous Or Scoped Modulation
 

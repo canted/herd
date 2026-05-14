@@ -92,7 +92,7 @@ Programs should be addressable by name in UI action pickers, but stored by stabl
 
 The Voice editor is the core working surface for a Program.
 
-Each Voice should show four device lanes:
+Each Voice should show a vertical stack of four devices:
 
 - Pattern
 - Instrument
@@ -113,16 +113,40 @@ Initial Pattern types:
 
 The step sequencer should support:
 
-- step count
+- configurable step count up to 64 steps
 - loop length
 - repetition count
 - tempo
-- per-step Trigs
-- note parameters
+- per-step Step Events
+- a compact 16-step row layout, with longer Patterns wrapping into additional rows
+- editor layer toggles for Instrument Triggers, Visualizer Triggers, and Parameter Locks
+- independent Instrument Trigger and Visualizer Trigger flags per Step Event
+- Parameter-only Step Events that change parameters without sending an Instrument Sounding Event or Visualizer Display Event
+- note parameters such as pitch, velocity, and duration when the Step Event has an Instrument Trigger
+- Cel parameters such as shape, HSBA color, saturation, and decay when the Step Event has a Visualizer Trigger
 - Instrument parameter locks
-- Cel parameter locks
-- UI parameter locks
+- Visualizer/Cel parameter locks
 - probability or conditional triggers if needed later
+
+In the Pattern editor, the Instrument Trigger and Visualizer Trigger toggles control whether the author is viewing and editing sounding/display triggers. If both trigger layers are off, the editor is focused on Parameter Locks. This should make it possible to program rhythm, visuals, and Parameter-only automation without conflating them.
+
+A Step Event is the sequencer-step object that stores authored data. It can contain:
+
+- an Instrument Trigger, which sends an Instrument Sounding Event, roughly equivalent to MIDI Note On
+- a Visualizer Trigger, which sends a Visualizer Display Event, the visual equivalent of Note On
+- Parameter Locks for the Instrument and/or Visualizer
+
+Instrument and Visualizer devices should define default values. Step Event Parameter Locks override those defaults for a single event, in the manner of an Elektron parameter-lock workflow. A Step Event may contain an Instrument Trigger, a Visualizer Trigger, both, or neither. A Step Event with neither trigger is still valid when it carries one or more Parameter Locks.
+
+The Step Event editor should support lock capture:
+
+1. The author selects a Step Event.
+2. The author chooses to create a new lock.
+3. The next touched or modified control on the Instrument or Visualizer is captured as the target.
+4. The edited value becomes the Step Event's locked value for that target.
+5. The affected control visibly indicates that the selected Step Event has a lock.
+
+Step Events do not have Modulation Mode. The Step Event editor only has Lock Capture for creating Parameter Locks. Modulation Mode belongs to Instruments and Visualizers because those devices own the modulation targets.
 
 The shaker Pattern should support:
 
@@ -140,7 +164,7 @@ The Instrument editor defines local sound generation.
 Initial Instrument types:
 
 - sampler
-- basic synth
+- polyphonic SH-101-style synth
 
 Sampler controls should include:
 
@@ -162,17 +186,26 @@ Sampler controls should include:
 - filter
 - effect sends or simple FX
 
+The synth should model the Roland SH-101 interaction style while allowing polyphonic playback. It should keep the immediacy of a simple subtractive mono synth, but each Participant device can play multiple overlapping notes when the Pattern requires it.
+
 Synth controls should include:
 
-- oscillator type
-- pitch
-- envelope
-- filter
+- VCO waveform mix for saw, pulse, sub oscillator, and noise
+- pulse width
+- pitch and tuning
+- glide/portamento
+- LFO rate and routing
+- filter cutoff and resonance
+- filter envelope amount
+- VCA mode
+- ADSR envelope
 - gain
 
-Instrument parameters should be available for Trig locks and modulation routing.
+Instrument parameters should be available for Step Event Parameter Locks and modulation routing.
 
 ## Modulation
+
+Modulation Mode belongs to the devices that own modulation targets: Instruments and Visualizers. It is not a Pattern editor mode, not a Step Event mode, and not a global source-browser mode.
 
 All Instruments and Visualizers will have 4 modulators. Each modulator outputs a normalized float in the range `-1..1` and has:
 

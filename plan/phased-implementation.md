@@ -37,7 +37,7 @@ Deliverables:
 - Shared TypeScript package for Composition types.
 - JSON schema or equivalent runtime validator.
 - Fixture Composition package format with relative assets and hashes.
-- Deterministic test fixtures for Programs, Voices, Patterns, Trigs, Parameters, modulation routes, and Program sequencing.
+- Deterministic test fixtures for Programs, Voices, Patterns, Step Events, Parameters, modulation routes, and Program sequencing.
 - Basic import/export path for local fixture packages.
 
 Reuse:
@@ -59,13 +59,13 @@ Build the first runnable participant experience around Web Audio V1.
 Deliverables:
 
 - Participant join page.
-- Consent and audio unlock flow.
+- Physical venue notice handoff, lightweight join screen, and audio unlock flow.
 - Server session creation with join code.
 - WebSocket session membership.
 - Clock sync with offset, round-trip latency, jitter, confidence, and last-sync time.
 - Transport mapper from server time to local transport position.
-- Lookahead scheduler for Pattern Trigs.
-- Web Audio V1 sampler and basic synth.
+- Lookahead scheduler for Pattern Step Events.
+- Web Audio V1 sampler and polyphonic SH-101-style synth.
 - Basic Visualizer event output.
 - UI Device prompts and choices.
 - Capability profile reporting.
@@ -83,7 +83,7 @@ Exit gate:
 
 - Multiple phones can join a local session and start a simple fixture at a scheduled server time.
 - The client reports audio state, clock sync state, permission state, and visibility state.
-- A resumed or late client skips stale Trigs and rejoins at the current transport position.
+- A resumed or late client skips stale Step Events and rejoins at the current transport position.
 
 ## Phase 2: Host Control And Operational Readiness
 
@@ -127,10 +127,10 @@ Deliverables:
 - Composition browser.
 - Program Sequencer editor.
 - Program editor.
-- Voice editor with Pattern, Instrument, Visualizer, and UI Device lanes.
+- Voice editor with a vertical Pattern, Instrument, Visualizer, and UI Device stack.
 - Step sequencer Pattern editor.
 - Minimal shaker Pattern editor.
-- Sampler and basic synth editors.
+- Sampler and polyphonic SH-101-style synth editors.
 - Visualizer editor.
 - UI Device prompt and choice editor.
 - Modulation mode for the first supported targets.

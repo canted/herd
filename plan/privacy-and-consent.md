@@ -8,9 +8,11 @@ Herd should collect the minimum data needed to run a live Performance. Participa
 
 The app should be explicit that microphone access is used for signal detection and relative positioning, not for recording speech.
 
-## Participant Consent
+## Physical Notice And Participant Entry
 
-Before joining a Performance, Participants should see a concise consent screen explaining:
+For normal public Performances, broad consent and expectation-setting should be handled by physical venue signage near the entrance and QR code, not by an in-app checkbox or consent screen.
+
+The physical notice should explain:
 
 - the phone will play sound
 - the screen will flash or change color
@@ -21,7 +23,16 @@ Before joining a Performance, Participants should see a concise consent screen e
 - no speech recording is needed for normal operation
 - leaving the page may interrupt participation
 
-Consent should be written for audience members, not engineers.
+The in-app Participant entry should stay lightweight:
+
+- Performance/session name
+- one-line reminder that the phone becomes part of the sound and light system
+- tap-to-begin/audio unlock action
+- link to privacy and device details
+
+Browser permission prompts still appear when microphone or motion access is actually needed. Diagnostic recording, if ever added, remains a separate explicit in-app consent flow.
+
+All notice and entry copy should be written for audience members, not engineers.
 
 ## Microphone Use
 

@@ -6,7 +6,7 @@ This document defines the planned audio engine variants for Herd and how the pro
 
 Herd should keep the Composition model engine-agnostic.
 
-Compositions should describe Instruments, Patterns, Trigs, Parameters, modulation, assets, and required capabilities. They should not depend on a specific implementation such as native Web Audio nodes, JavaScript AudioWorklet processors, or Rust/WASM internals.
+Compositions should describe Instruments, Patterns, Step Events, Parameters, modulation, assets, and required capabilities. They should not depend on a specific implementation such as native Web Audio nodes, JavaScript AudioWorklet processors, or Rust/WASM internals.
 
 The runtime can then choose the best available engine path for the current device and Performance. If a device cannot support a requested capability, the client should report a degraded capability state and use the Composition's fallback behavior.
 
@@ -23,7 +23,7 @@ Defer **Variant 3: Full WASM Engine** until Herd has measured evidence that nati
 All variants need the same high-level runtime responsibilities:
 
 - translate synchronized server time into local audio time
-- schedule Trigs ahead of playback
+- schedule Step Events ahead of playback
 - create and release Voice-local Instrument state
 - load and decode audio assets
 - apply parameter locks and modulation
@@ -72,20 +72,21 @@ It uses native Web Audio nodes with TypeScript orchestration. It should not requ
 Variant 1 should support:
 
 - scheduled sample playback
-- basic synth voices
+- polyphonic SH-101-style synth voices
+- SH-101-style synth controls: saw, pulse, sub oscillator, noise, pulse width, LFO, filter, envelope, VCA, and glide/portamento
 - gain envelopes
 - pitch and tuning
 - filters
 - simple effect sends or simple effects
 - parameter locks
 - boundary-based modulation
-- motion-driven shaker Trigs where motion permission is available
+- motion-driven shaker Step Events where motion permission is available
 - synchronized visual/audio scheduling against the shared transport
 
 Variant 1 may use:
 
 - `AudioBufferSourceNode` for sample playback
-- `OscillatorNode` or `PeriodicWave` for basic synths
+- `OscillatorNode` or `PeriodicWave` for SH-101-style synth oscillators
 - `GainNode` for amplitude and envelopes
 - `BiquadFilterNode` for filter behavior
 - `AudioParam` automation for scheduled parameter changes
@@ -108,7 +109,7 @@ The scheduler should place events far enough ahead to survive ordinary main-thre
 - fastest path to a working product
 - lowest toolchain complexity
 - uses browser-optimized native audio nodes
-- supports the initial sampler/basic synth scope
+- supports the initial sampler/polyphonic SH-101-style synth scope
 - keeps authoring UI and Composition semantics moving while audio requirements are still fluid
 - easier to debug than AudioWorklet/WASM on mobile
 
@@ -123,7 +124,7 @@ The scheduler should place events far enough ahead to survive ordinary main-thre
 
 - Uncertain: native Web Audio scheduling may or may not be reliable enough under visual/UI load on target phones.
 - Uncertain: mobile browser behavior may force an AudioWorklet for some future processor, but this should be proven with testing.
-- Uncertain: the real product may demand audio features beyond the initial sampler/basic synth scope.
+- Uncertain: the real product may demand audio features beyond the initial sampler/polyphonic SH-101-style synth scope.
 
 ### Validation
 
@@ -328,7 +329,7 @@ Before moving beyond Variant 1, answer:
 - What minimum iOS and Android versions are supported?
 - Can the product require HTTPS and cross-origin isolation if needed?
 - What fallback is acceptable when a phone cannot run positioning or advanced audio?
-- Are sampler and basic synth enough for initial creators?
+- Are sampler and a polyphonic SH-101-style synth enough for initial creators?
 - Who owns Rust/WASM audio code long term?
 
 ## Authoring Implications
