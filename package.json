@@ -5,13 +5,34 @@
   "type": "module",
   "packageManager": "pnpm@10.28.2",
   "scripts": {
+    "dev": "concurrently -n server,host,participant -c cyan,green,magenta \"pnpm --filter @herd/server dev\" \"pnpm --filter @herd/host dev\" \"pnpm --filter @herd/participant dev\"",
+    "dev:server": "pnpm --filter @herd/server dev",
+    "dev:host": "pnpm --filter @herd/host dev",
+    "dev:participant": "pnpm --filter @herd/participant dev",
+    "build": "pnpm -r --if-present build",
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
     "check": "pnpm typecheck && pnpm test"
   },
   "devDependencies": {
     "@types/node": "^25.8.0",
+    "@types/qrcode": "^1.5.6",
+    "@types/react": "^19.2.14",
+    "@types/react-dom": "^19.2.3",
+    "@types/ws": "^8.18.1",
+    "@vitejs/plugin-react": "^6.0.2",
+    "concurrently": "^9.2.1",
+    "playwright-core": "^1.60.0",
+    "tsx": "^4.22.0",
     "typescript": "^6.0.3",
+    "vite": "^8.0.13",
     "vitest": "^4.1.6"
+  },
+  "dependencies": {
+    "lucide-react": "^1.16.0",
+    "qrcode": "^1.5.4",
+    "react": "^19.2.6",
+    "react-dom": "^19.2.6",
+    "ws": "^8.20.1"
   }
 }

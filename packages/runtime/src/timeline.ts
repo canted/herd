@@ -56,6 +56,17 @@ export interface BuildRuntimeTimelineOptions {
   startTimeMs?: number;
 }
 
+export interface ProgramTimelineSegment {
+  programId: string;
+  startTimeMs: number;
+  durationMs: number;
+}
+
+export interface CompositionTimeline {
+  segments: ProgramTimelineSegment[];
+  events: RuntimeTimelineEvent[];
+}
+
 export function buildRuntimeTimeline(
   composition: Composition,
   options: BuildRuntimeTimelineOptions = {},
@@ -73,6 +84,37 @@ export function buildRuntimeTimeline(
   }
 
   return events.sort(compareRuntimeEvents);
+}
+
+export function buildCompositionTimeline(
+  composition: Composition,
+  startTimeMs = 0,
+): CompositionTimeline {
+  const events: RuntimeTimelineEvent[] = [];
+  const segments: ProgramTimelineSegment[] = [];
+  let cursorMs = startTimeMs;
+
+  for (const step of composition.programSequencer.steps) {
+    const program = findProgram(composition, step.programId);
+    const programEvents = buildRuntimeTimeline(composition, {
+      programId: program.id,
+      startTimeMs: cursorMs,
+    });
+    const durationMs = getProgramDurationMs(program);
+
+    segments.push({
+      programId: program.id,
+      startTimeMs: cursorMs,
+      durationMs,
+    });
+    events.push(...programEvents);
+    cursorMs += durationMs;
+  }
+
+  return {
+    segments,
+    events: events.sort(compareRuntimeEvents),
+  };
 }
 
 export function skipStaleEvents<T extends RuntimeTimelineEvent>(
@@ -203,6 +245,16 @@ function getRepetitions(program: Program, voice: ProgramVoice): number {
   }
 
   return voice.pattern.repetitions ?? 1;
+}
+
+function getProgramDurationMs(program: Program): number {
+  return Math.max(
+    ...program.voices.map((voice) => {
+      const stepMs = (60_000 / voice.pattern.tempoBpm) * voice.pattern.stepDurationBeats;
+      const loopMs = stepMs * voice.pattern.stepCount;
+      return loopMs * getRepetitions(program, voice);
+    }),
+  );
 }
 
 function hasLocks(locks: ParameterLocks | undefined): locks is ParameterLocks {

@@ -6,6 +6,7 @@ import {
 } from "../../composition/src/index";
 import {
   applyParameterLocks,
+  buildCompositionTimeline,
   buildRuntimeTimeline,
   skipStaleEvents,
 } from "./index";
@@ -88,6 +89,24 @@ describe("buildRuntimeTimeline", () => {
       "choice-left",
       "choice-right",
     ]);
+  });
+
+  it("builds a sequenced Composition timeline across Programs", () => {
+    const timeline = buildCompositionTimeline(loadComposition());
+
+    expect(timeline.segments).toEqual([
+      {
+        programId: "intro-pulse",
+        startTimeMs: 0,
+        durationMs: 4000,
+      },
+      {
+        programId: "choice-branch",
+        startTimeMs: 4000,
+        durationMs: 2666.6666666666665,
+      },
+    ]);
+    expect(timeline.events.some((event) => event.type === "uiPrompt" && event.timeMs === 4000)).toBe(true);
   });
 });
 
