@@ -10,6 +10,9 @@ import type {
   CreateSessionResponse,
   ServerToClientMessage,
 } from "@herd/protocol";
+import { normalizeOwnerEmail } from "./creatorStore";
+import { createCreatorRepository } from "./creatorRepository";
+import { createPackageUploadUrl, loadTigrisStorageConfig } from "./packageStorage";
 import { SessionStore } from "./sessionStore";
 
 export interface HerdServerOptions {
@@ -26,6 +29,7 @@ interface ClientConnection {
 
 const fixture = loadFixture();
 const store = new SessionStore();
+const creatorStore = createCreatorRepository();
 const connectionsByCode = new Map<string, Set<ClientConnection>>();
 
 export function startServer(options: HerdServerOptions = {}) {
@@ -66,13 +70,90 @@ async function handleRequest(request: IncomingMessage, response: ServerResponse)
   const url = new URL(request.url ?? "/", `http://${request.headers.host ?? "localhost"}`);
 
   try {
-    if (request.method === "GET" && url.pathname === "/health") {
+    if (request.method === "GET" && (url.pathname === "/health" || url.pathname === "/healthz")) {
       writeJson(response, 200, { ok: true, serverTimeMs: Date.now() });
+      return;
+    }
+
+    if (request.method === "GET" && url.pathname === "/readyz") {
+      const tigris = loadTigrisStorageConfig();
+      writeJson(response, 200, {
+        ok: true,
+        serverTimeMs: Date.now(),
+        dependencies: {
+          creatorStore: creatorStore.kind,
+          tigris: tigris === null ? "not_configured" : "configured",
+        },
+      });
+      return;
+    }
+
+    if (request.method === "GET" && url.pathname === "/version") {
+      writeJson(response, 200, {
+        name: "herd-server",
+        version: process.env.HERD_VERSION ?? "local",
+        revision: process.env.FLY_IMAGE_REF ?? process.env.GIT_COMMIT_SHA ?? "unknown",
+        environment: process.env.NODE_ENV ?? "development",
+      });
       return;
     }
 
     if (request.method === "GET" && url.pathname === "/api/fixtures/rehearsal-basic") {
       writeJson(response, 200, fixture);
+      return;
+    }
+
+    if (request.method === "GET" && url.pathname === "/api/creator/compositions") {
+      const ownerEmail = parseOwnerEmail(url.searchParams.get("ownerEmail"));
+
+      writeJson(response, 200, { compositions: await creatorStore.listCompositions(ownerEmail) });
+      return;
+    }
+
+    if (request.method === "POST" && url.pathname === "/api/creator/compositions") {
+      const body = await readJsonBody(request);
+      const ownerEmail = parseOwnerEmail(body.ownerEmail);
+      const composition = parseRequiredComposition(body.composition);
+      const record = await creatorStore.saveComposition({ ownerEmail, composition });
+      writeJson(response, 201, { composition: record });
+      return;
+    }
+
+    if (request.method === "GET" && url.pathname === "/api/creator/packages") {
+      const ownerEmail = parseOwnerEmail(url.searchParams.get("ownerEmail"));
+
+      writeJson(response, 200, { packages: await creatorStore.listPackages(ownerEmail) });
+      return;
+    }
+
+    if (request.method === "POST" && url.pathname === "/api/creator/packages") {
+      const body = await readJsonBody(request);
+      const ownerEmail = parseOwnerEmail(body.ownerEmail);
+      const composition = parseRequiredComposition(body.composition);
+      const filename = typeof body.filename === "string" ? body.filename : undefined;
+      const contentType = typeof body.contentType === "string" ? body.contentType : "application/zip";
+      const record = await creatorStore.createPackage({
+        ownerEmail,
+        composition,
+        ...(filename === undefined ? {} : { filename }),
+      });
+      const tigris = loadTigrisStorageConfig();
+      const uploadUrl = tigris === null
+        ? null
+        : await createPackageUploadUrl({
+          config: tigris,
+          objectKey: record.objectKey,
+          contentType,
+        });
+
+      writeJson(response, 201, {
+        package: record,
+        upload: {
+          objectKey: record.objectKey,
+          configured: tigris !== null,
+          uploadUrl,
+        },
+      });
       return;
     }
 
@@ -109,7 +190,7 @@ async function handleRequest(request: IncomingMessage, response: ServerResponse)
 
     writeJson(response, 404, { error: "Not found." });
   } catch (error) {
-    writeJson(response, 500, {
+    writeJson(response, error instanceof HttpError ? error.status : 500, {
       error: error instanceof Error ? error.message : "Unknown server error.",
     });
   }
@@ -287,6 +368,37 @@ function parseSessionComposition(input: unknown): Composition {
   }
 
   return result.value;
+}
+
+function parseRequiredComposition(input: unknown): Composition {
+  if (input === undefined) {
+    throw new HttpError(400, "composition is required.");
+  }
+
+  const result = validateComposition(input);
+  if (!result.ok) {
+    throw new HttpError(400, `Composition validation failed: ${result.issues[0]?.message ?? "Invalid Composition."}`);
+  }
+
+  return result.value;
+}
+
+function parseOwnerEmail(input: unknown): string {
+  if (typeof input !== "string") {
+    throw new HttpError(400, "ownerEmail is required.");
+  }
+
+  try {
+    return normalizeOwnerEmail(input);
+  } catch (error) {
+    throw new HttpError(400, error instanceof Error ? error.message : "A valid owner email is required.");
+  }
+}
+
+class HttpError extends Error {
+  constructor(public readonly status: number, message: string) {
+    super(message);
+  }
 }
 
 async function readJsonBody(request: IncomingMessage): Promise<Record<string, unknown>> {

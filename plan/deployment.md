@@ -2,12 +2,14 @@
 
 This document defines the initial deployment plan for Herd.
 
-The target platform is Fly.io for the application runtime and Fly.io Managed Postgres for durable data. The first deployable system should stay intentionally simple: one web/realtime application, one Postgres database per environment, and no extra infrastructure until a measured need appears.
+The target platform class is Fly.io/Render-style app hosting. The current concrete default is Fly.io for the application runtime, Fly.io Managed Postgres for durable metadata, and Tigris for object/package storage. The first deployable system should stay intentionally simple: one web/realtime application, one Postgres database per environment, one private Tigris bucket, and no extra infrastructure until a measured need appears.
 
 ## Goals
 
 - Deploy the Host dashboard, Participant client, realtime session server, and API as one Fly App.
-- Use Fly.io Managed Postgres as the system of record for users, Compositions, Performance metadata, audit events, health reports, positioning scan results, and recovery state.
+- Use Fly.io Managed Postgres as the system of record for users, Compositions, package metadata, Performance metadata, audit events, health reports, positioning scan results, and recovery state.
+- Use Tigris for package archives and media assets.
+- Use email magic links for Author and Host accounts.
 - Keep live Performance timing resilient to short network gaps by letting clients execute locally, as described in `authority-model.md`.
 - Keep operations simple enough for rehearsals: predictable deploys, clear rollback, readable logs, and an explicit production checklist before a live Performance.
 - Avoid platform choices that force global distribution before the realtime coordination model can support it.
@@ -19,6 +21,7 @@ The target platform is Fly.io for the application runtime and Fly.io Managed Pos
 - Storing large audio assets directly in Postgres.
 - Running a database inside the application Machine.
 - Building a custom orchestration layer around Fly Machines.
+- Participant accounts or persistent Participant identity.
 
 ## Platform Decision
 
@@ -82,8 +85,11 @@ Herd has two classes of state.
 
 Durable state belongs in Postgres:
 
-- Composition package manifests and metadata.
+- Author and Host user records.
+- Composition records owned by users.
+- Package manifests and metadata owned by users.
 - Package versions, hashes, and validation status.
+- Tigris object keys and upload status.
 - Performance setup records.
 - Participant join records.
 - Host actions and emergency controls.
@@ -102,6 +108,42 @@ Hot live state may start in memory:
 
 The in-memory state is acceptable for the earliest rehearsable system only if a server restart is allowed to end or degrade the active Performance. Before production claims recovery from server restart, the server must persist enough state for clients to reconnect and report their local cursor, as described in `failure-modes.md`.
 
+## Auth And Ownership
+
+Initial auth uses email magic links.
+
+Account scope:
+
+- Authors and Hosts have accounts.
+- Participants remain anonymous per session.
+- Participant device IDs are pseudonymous session/runtime identifiers, not user accounts.
+
+Ownership model:
+
+- A User owns Compositions and Packages.
+- A Package is a versioned, validated runnable artifact derived from a Composition.
+- A Performance session references a Package or an authored Composition snapshot.
+- Organization, venue, and event ownership are deferred until there is a concrete collaboration requirement.
+
+Initial infrastructure ownership:
+
+- One project owner controls infrastructure, secrets, deployment, and Tigris/Postgres access.
+- Broader admin/team ownership is deferred.
+
+First persistence target:
+
+- Save authored Compositions and Packages.
+- Session/event-log persistence comes after creator/package persistence unless operational evidence forces it earlier.
+
+Current implementation scaffold:
+
+- Authoring can save Compositions and create package records through local server endpoints.
+- The server uses an in-memory creator store for local development and switches to a Postgres-backed creator store when `DATABASE_URL` is configured.
+- `apps/server/migrations/001_creator_storage.sql` defines the first Postgres schema for users, Compositions, and Packages.
+- `pnpm --filter @herd/server db:migrate` runs unapplied SQL migrations with `DIRECT_DATABASE_URL` or `DATABASE_URL`.
+- Tigris-compatible signed upload URL generation is available when object-storage environment variables are present.
+- Email magic-link account sessions and deployed Tigris verification are still pending.
+
 ## Postgres Usage
 
 Use the Managed Postgres pooled connection URL for normal application queries.
@@ -117,6 +159,11 @@ Environment variables:
 
 - `DATABASE_URL`: pooled application connection string.
 - `DIRECT_DATABASE_URL`: direct connection string for migrations and session-scoped operations.
+- `TIGRIS_ENDPOINT`: S3-compatible Tigris endpoint.
+- `TIGRIS_BUCKET`: private package/media bucket.
+- `TIGRIS_ACCESS_KEY_ID`: Tigris access key.
+- `TIGRIS_SECRET_ACCESS_KEY`: Tigris secret key.
+- `TIGRIS_REGION`: Tigris signing region, defaulting to `auto` in local server code when omitted.
 
 Connection pool requirements:
 
@@ -146,11 +193,15 @@ Postgres should store:
 - ownership and access rules
 - package version references
 
-The binary asset store is an implementation decision for Phase 3. Options include:
+Binary asset storage uses Tigris.
 
-- object storage, preferred for production package assets
-- Fly volume storage for a constrained internal prototype
-- database byte storage only for tiny fixtures and tests
+Initial Tigris shape:
+
+- One private bucket per environment.
+- Scoped object keys, for example `users/{userId}/packages/{packageId}/versions/{versionId}/...`.
+- Private access only through signed URLs or server-mediated reads.
+- Draft and published packages both remain private at the object-storage layer.
+- Participants are authorized automatically through a valid session/package join path; they should not need accounts or explicit asset login.
 
 The deploy plan should not depend on local filesystem persistence in the app Machine. Fly Machines have an ephemeral root filesystem unless a volume is explicitly attached, and the main app should remain stateless.
 
@@ -221,7 +272,7 @@ kill_timeout = 30
   PORT = "8080"
 
 [deploy]
-  release_command = "/bin/sh -lc 'DATABASE_URL=$DIRECT_DATABASE_URL npm run db:migrate'"
+  release_command = "/bin/sh -lc 'pnpm --filter @herd/server db:migrate'"
   release_command_timeout = "10m"
   strategy = "rolling"
 
@@ -242,7 +293,7 @@ kill_timeout = 30
     path = "/healthz"
 ```
 
-Adjust the migration command to match the eventual framework. For example, Prisma, Drizzle, Rails, Phoenix, Django, or another migration tool will each need its own command.
+The migration script uses `DIRECT_DATABASE_URL` when present and falls back to `DATABASE_URL`.
 
 ## Setup Commands
 
@@ -331,8 +382,12 @@ Expected secrets:
 - `DATABASE_URL`
 - `DIRECT_DATABASE_URL`
 - `SESSION_SECRET`
-- auth provider secrets, once account management exists
-- object storage credentials, once package asset storage exists
+- email provider secrets for magic-link delivery
+- `TIGRIS_ENDPOINT`
+- `TIGRIS_BUCKET`
+- `TIGRIS_ACCESS_KEY_ID`
+- `TIGRIS_SECRET_ACCESS_KEY`
+- `TIGRIS_REGION`, if the selected Tigris environment requires a non-default signing region
 
 Do not commit `.env` files with real values. Local development should use `.env.example` with names only.
 
@@ -418,11 +473,11 @@ Before a live event:
 
 ## Open Decisions
 
-- Final application framework and migration command.
-- Whether package assets use object storage from the start or wait until Authoring MVP.
+- Final production Dockerfile and app packaging.
 - Whether the first production rehearsal accepts single-Machine runtime risk.
 - Whether cross-Machine session coordination uses Redis, NATS, Postgres direct connections, or Fly routing.
 - Final production region strategy for performances outside the initial rehearsal geography.
+- Email delivery provider for magic links.
 - Backup restore drill schedule once real Composition and Performance data exist.
 
 ## References

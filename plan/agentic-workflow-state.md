@@ -6,7 +6,7 @@ Build out Herd from the durable specs into a fuller app, continuing beyond the r
 
 ## Current Recommendation
 
-Continue from the authoring/composition, sampler rehearsal, local package, and positioning-lab milestone into real-device validation and deeper performance fidelity. The app can now create authored Compositions, package local media in `.herd.zip` archives, import those packages, launch them into rehearsal sessions, play authored sampler zones in the Participant runtime, and run a standalone simulated Sonic Positioning Lab workflow.
+Continue from the authoring/composition, sampler rehearsal, local package, positioning-lab, and creator-persistence scaffold milestone into account/session integration and real-device validation. The app can now create authored Compositions, package local media in `.herd.zip` archives, import those packages, launch them into rehearsal sessions, play authored sampler zones in the Participant runtime, edit modulation routes in the authoring UI, create creator Composition/package records through memory or Postgres-backed server storage, and run a standalone simulated Sonic Positioning Lab workflow.
 
 ## Completed Phases
 
@@ -18,11 +18,15 @@ Continue from the authoring/composition, sampler rehearsal, local package, and p
 - Asset and sampler authoring metadata: asset import creates Composition asset references with decoded audio duration when available; sampler Instruments can define zones with asset, pitch, velocity, root key, gain, trim, and loop settings.
 - Runtime sampler playback: Authoring embeds imported media as prototype data URL payloads in Composition metadata; Participant decodes embedded audio assets, reports asset readiness, and routes sampler Instrument events through AudioBuffer playback.
 - Durable local package workflow: Authoring exports `.herd.zip` archives containing `composition.json` plus media files, imports the same archive format, rehydrates local media for rehearsal, and round-trips packages into Host/Participant sessions.
+- Richer modulation route editing: Authoring exposes captured modulation routes with source selection, enable/disable, amount, range min/max, invalid-target flags, and route deletion for Instrument and Visualizer controls.
+- Creator persistence/package scaffold: Server exposes creator Composition/package endpoints backed by a local in-memory store or Postgres when `DATABASE_URL` is configured, includes an initial migration runner and Postgres migration for users/Compositions/Packages, exposes deployment health/readiness/version endpoints, and can generate Tigris-compatible signed package upload URLs when object-storage secrets are configured.
 - Sonic Positioning Lab prototype: standalone controller app with session QR, device labels/roles, chirp profiles, simulated scan measurements, approximate relative layout preview, operator notes, and JSON evidence export.
 
 ## Active Phase
 
-- Real-device positioning and timing validation:
+- Durable backend integration and real-device validation:
+  - Wire email magic-link auth for Author/Host accounts once the email provider is chosen.
+  - Configure and verify Tigris package upload/download in a deployed environment.
   - Replace simulated lab measurements with real chirp emission, microphone capture, cross-correlation, and upload flow.
   - Validate mobile timing, sample-rate behavior, mic permission UX, and acoustic robustness on physical iOS/Android devices.
 
@@ -33,24 +37,41 @@ Continue from the authoring/composition, sampler rehearsal, local package, and p
 - Asset manager and sampler zone authoring.
 - Runtime sampler playback for embedded authoring assets.
 - Durable local `.herd.zip` package export/import.
+- Richer authoring modulation route UI.
+- Creator Composition/package API scaffold with memory/Postgres store selection, migration runner, Postgres migration, deployment health endpoints, and Tigris signed upload URL utility.
 - Simulated Sonic Positioning Lab prototype.
 
 ## Next Phase
 
-- Real-device Sonic Positioning Lab client/protocol work, gated by physical-device testing.
+- Tigris upload verification and magic-link account sessions, then real-device Sonic Positioning Lab client/protocol work gated by physical-device testing.
 
 ## Blocked Items
 
 - Public deployment readiness and legal/signage review remain outside the current implementation phase.
+- Actual Tigris upload/download verification requires real Tigris credentials and environment configuration.
+- Magic-link delivery requires an email provider decision and provider secrets.
 - Acoustic positioning accuracy, microphone capture behavior, and real-device mobile timing require physical iOS/Android devices in a real room before they can be called complete.
 
 ## Deferred Items
 
-- Full modulation routing UI.
-- Persistent backend storage/accounts.
-- Public package storage and account-scoped asset libraries.
+- Runtime modulation routing depth beyond captured target amount/range editing.
+- Account sessions and account asset libraries beyond the creator persistence scaffold. Storage provider decision: use Tigris for backend object/package storage.
+- Public package storage and account-scoped asset libraries. Storage provider decision: use Tigris for package/media assets.
 - Production acoustic-positioning solver and robust real measurement pipeline.
+
+## Decisions Made
+
+- Backend object/package storage will use Tigris.
+- Auth will use email magic links.
+- Accounts are for Authors and Hosts only; Participants remain anonymous per session.
+- Users own Compositions and Packages.
+- Metadata persists in Postgres.
+- Tigris uses one private bucket with scoped object keys.
+- Package access is private signed URLs/server-mediated reads; Participants are authorized automatically through a valid session/package join path.
+- Initial deployment target remains Fly.io/Render-style app hosting, with Fly.io as the current concrete deployment plan.
+- One project owner owns infrastructure and secrets initially.
+- First persistence target is authored Compositions and Packages.
 
 ## Next Intended Action
 
-Run real-device positioning and mobile timing validation, then implement the actual chirp capture/correlation path against measured device behavior.
+Implement account sessions where possible without live provider credentials; configure Tigris and magic-link delivery once secrets/provider choices are available; then run real-device positioning and mobile timing validation.

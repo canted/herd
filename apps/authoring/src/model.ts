@@ -27,6 +27,11 @@ export interface ModulationRoute {
   source: string;
   target: string;
   amount: number;
+  range?: {
+    min: number;
+    max: number;
+  };
+  enabled?: boolean;
 }
 
 export function seedCompositions(): Composition[] {
@@ -360,6 +365,42 @@ export function setModulationRoute(voice: ProgramVoice, route: ModulationRoute):
       ),
   );
   routes.push(route);
+  voice.parameters = {
+    ...(voice.parameters ?? {}),
+    modulationRoutes: routes as unknown as ParameterValue,
+  };
+}
+
+export function updateModulationRoute(
+  voice: ProgramVoice,
+  route: Pick<ModulationRoute, "device" | "modulator" | "target">,
+  patch: Partial<ModulationRoute>,
+): void {
+  const routes = getModulationRoutes(voice).map((candidate) =>
+    candidate.device === route.device &&
+      candidate.modulator === route.modulator &&
+      candidate.target === route.target
+      ? { ...candidate, ...patch }
+      : candidate,
+  );
+  voice.parameters = {
+    ...(voice.parameters ?? {}),
+    modulationRoutes: routes as unknown as ParameterValue,
+  };
+}
+
+export function clearModulationRoute(
+  voice: ProgramVoice,
+  route: Pick<ModulationRoute, "device" | "modulator" | "target">,
+): void {
+  const routes = getModulationRoutes(voice).filter(
+    (candidate) =>
+      !(
+        candidate.device === route.device &&
+        candidate.modulator === route.modulator &&
+        candidate.target === route.target
+      ),
+  );
   voice.parameters = {
     ...(voice.parameters ?? {}),
     modulationRoutes: routes as unknown as ParameterValue,

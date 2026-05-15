@@ -13,6 +13,7 @@ import {
   Radio,
   Save,
   Trash2,
+  Upload,
 } from "lucide-react";
 import type {
   AssetReference,
@@ -30,6 +31,7 @@ import { validateComposition } from "@herd/composition";
 import { buildCompositionTimeline } from "@herd/runtime";
 import {
   clampStepCount,
+  clearModulationRoute,
   clearStepEventLock,
   cloneComposition,
   createBlankComposition,
@@ -48,12 +50,15 @@ import {
   setModulationRoute,
   setNestedParameter,
   setStepEventLock,
+  updateModulationRoute,
   validateAuthoringComposition,
   type DeviceScope,
   type LockScope,
+  type ModulationRoute,
 } from "./model";
 
 const storageKey = "herd.authoring.compositions.v1";
+const creatorEmailStorageKey = "herd.authoring.creatorEmail.v1";
 const serverBase = import.meta.env.VITE_SERVER_URL ?? "http://localhost:8787";
 const hostBase = import.meta.env.VITE_HOST_URL ?? "http://localhost:5173";
 
@@ -126,6 +131,8 @@ export function App() {
   const [modulators, setModulators] = useState(defaultModulators);
   const [importError, setImportError] = useState<string | null>(null);
   const [launchError, setLaunchError] = useState<string | null>(null);
+  const [creatorEmail, setCreatorEmail] = useState(() => localStorage.getItem(creatorEmailStorageKey) ?? "");
+  const [serverStatus, setServerStatus] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const packageInputRef = useRef<HTMLInputElement | null>(null);
   const assetInputRef = useRef<HTMLInputElement | null>(null);
@@ -142,6 +149,10 @@ export function App() {
   useEffect(() => {
     localStorage.setItem(storageKey, JSON.stringify(compositions));
   }, [compositions]);
+
+  useEffect(() => {
+    localStorage.setItem(creatorEmailStorageKey, creatorEmail);
+  }, [creatorEmail]);
 
   useEffect(() => {
     if (activeComposition === undefined) return;
@@ -282,9 +293,77 @@ export function App() {
   async function exportPackage() {
     if (activeComposition === undefined) return;
 
+    downloadBlob(await buildPackageBlob(activeComposition), `${activeComposition.id}.herd.zip`);
+  }
+
+  async function saveActiveToServer() {
+    if (activeComposition === undefined) return;
+    setServerStatus(null);
+
+    const response = await fetch(`${serverBase}/api/creator/compositions`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        ownerEmail: creatorEmail,
+        composition: activeComposition,
+      }),
+    });
+
+    if (!response.ok) {
+      setServerStatus(`Save failed: ${response.status}`);
+      return;
+    }
+
+    setServerStatus("Composition saved.");
+  }
+
+  async function uploadPackageToServer() {
+    if (activeComposition === undefined) return;
+    setServerStatus(null);
+
+    const blob = await buildPackageBlob(activeComposition);
+    const filename = `${activeComposition.id}.herd.zip`;
+    const response = await fetch(`${serverBase}/api/creator/packages`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        ownerEmail: creatorEmail,
+        composition: activeComposition,
+        filename,
+        contentType: "application/zip",
+      }),
+    });
+
+    if (!response.ok) {
+      setServerStatus(`Package failed: ${response.status}`);
+      return;
+    }
+
+    const payload = (await response.json()) as {
+      upload: {
+        configured: boolean;
+        uploadUrl: string | null;
+      };
+    };
+
+    if (payload.upload.uploadUrl === null) {
+      setServerStatus("Package record created. Tigris is not configured.");
+      return;
+    }
+
+    const uploadResponse = await fetch(payload.upload.uploadUrl, {
+      method: "PUT",
+      headers: { "Content-Type": "application/zip" },
+      body: blob,
+    });
+
+    setServerStatus(uploadResponse.ok ? "Package uploaded." : `Upload failed: ${uploadResponse.status}`);
+  }
+
+  async function buildPackageBlob(composition: Composition): Promise<Blob> {
     const zip = new JSZip();
-    const packaged = cloneComposition(activeComposition);
-    const embeddedAssets = readEmbeddedAssets(activeComposition);
+    const packaged = cloneComposition(composition);
+    const embeddedAssets = readEmbeddedAssets(composition);
 
     for (const asset of packaged.assets) {
       asset.path = normalizePackagePath(asset.path);
@@ -297,8 +376,7 @@ export function App() {
     stripEmbeddedAssets(packaged);
     zip.file("composition.json", JSON.stringify(packaged, null, 2));
 
-    const blob = await zip.generateAsync({ type: "blob" });
-    downloadBlob(blob, `${activeComposition.id}.herd.zip`);
+    return zip.generateAsync({ type: "blob" });
   }
 
   async function openRehearsalFromActive() {
@@ -452,10 +530,28 @@ export function App() {
             source: draft.source,
             amount: draft.amount,
             target: path,
+            enabled: true,
+            ...(typeof value === "number" ? { range: { min: 0, max: Math.max(1, value) } } : {}),
           });
         }
         setModulationCapture(null);
       }
+    });
+  }
+
+  function patchModulationRoute(route: ModulationRoute, patch: Partial<ModulationRoute>) {
+    if (selectedProgram === undefined || selectedVoice === undefined) return;
+    updateActive((composition) => {
+      const voice = getVoice(getProgram(composition, selectedProgram.id), selectedVoice.id);
+      updateModulationRoute(voice, route, patch);
+    });
+  }
+
+  function removeModulationRoute(route: ModulationRoute) {
+    if (selectedProgram === undefined || selectedVoice === undefined) return;
+    updateActive((composition) => {
+      const voice = getVoice(getProgram(composition, selectedProgram.id), selectedVoice.id);
+      clearModulationRoute(voice, route);
     });
   }
 
@@ -597,6 +693,13 @@ export function App() {
                 delete ensureEmbeddedAssets(composition)[assetId];
               })}
             />
+            <CreatorPersistencePanel
+              creatorEmail={creatorEmail}
+              status={serverStatus}
+              onCreatorEmail={setCreatorEmail}
+              onSave={() => void saveActiveToServer()}
+              onPackage={() => void uploadPackageToServer()}
+            />
           </div>
 
           <div className="device-stack">
@@ -623,6 +726,8 @@ export function App() {
               onModulators={(drafts) => setModulators((current) => ({ ...current, instrument: drafts }))}
               onArmModulation={(modulator) => setModulationCapture({ device: "instrument", modulator })}
               onParameter={(path, value) => updateDeviceParameter("instrument", path, value)}
+              onRoutePatch={patchModulationRoute}
+              onRouteDelete={removeModulationRoute}
               assets={activeComposition.assets}
               onInstrumentType={(type) => updateActive((composition) => {
                 getVoice(getProgram(composition, selectedProgram.id), selectedVoice.id).instrument.type = type;
@@ -640,6 +745,8 @@ export function App() {
               onModulators={(drafts) => setModulators((current) => ({ ...current, visualizer: drafts }))}
               onArmModulation={(modulator) => setModulationCapture({ device: "visualizer", modulator })}
               onParameter={(path, value) => updateDeviceParameter("visualizer", path, value)}
+              onRoutePatch={patchModulationRoute}
+              onRouteDelete={removeModulationRoute}
             />
             <UIDeviceEditor
               voice={selectedVoice}
@@ -1153,6 +1260,37 @@ function AssetManager({
   );
 }
 
+function CreatorPersistencePanel({
+  creatorEmail,
+  status,
+  onCreatorEmail,
+  onSave,
+  onPackage,
+}: {
+  creatorEmail: string;
+  status: string | null;
+  onCreatorEmail: (email: string) => void;
+  onSave: () => void;
+  onPackage: () => void;
+}) {
+  return (
+    <section className="panel creator-panel">
+      <div className="panel-heading">
+        <h2>Server</h2>
+      </div>
+      <label>
+        Creator email
+        <input value={creatorEmail} onChange={(event) => onCreatorEmail(event.target.value)} />
+      </label>
+      <div className="creator-actions">
+        <button onClick={onSave}><Save size={14} />Save</button>
+        <button onClick={onPackage}><Upload size={14} />Package</button>
+      </div>
+      {status !== null && <p className="server-status">{status}</p>}
+    </section>
+  );
+}
+
 interface DeviceEditorProps {
   voice: ProgramVoice;
   selectedEvent: StepEvent | undefined;
@@ -1162,6 +1300,8 @@ interface DeviceEditorProps {
   onModulators: (drafts: ModulatorDraft[]) => void;
   onArmModulation: (modulator: number) => void;
   onParameter: (path: string, value: ParameterValue) => void;
+  onRoutePatch: (route: ModulationRoute, patch: Partial<ModulationRoute>) => void;
+  onRouteDelete: (route: ModulationRoute) => void;
 }
 
 function DevicePanel({
@@ -1174,12 +1314,17 @@ function DevicePanel({
   onModulators,
   onArmModulation,
   modulationCapture,
+  onRoutePatch,
+  onRouteDelete,
 }: DeviceEditorProps & {
   title: string;
   subtitle: string;
   scope: DeviceScope;
   children: ReactNode;
 }) {
+  const routes = getModulationRoutes(voice).filter((route) => route.device === scope);
+  const targetDefaults = scope === "instrument" ? voice.instrument.defaults : voice.visualizer.defaults;
+
   return (
     <section className="device-panel">
       <DeviceHeader title={title} subtitle={subtitle} />
@@ -1223,13 +1368,96 @@ function DevicePanel({
             </button>
           </div>
         ))}
-        <div className="route-list">
-          {getModulationRoutes(voice).filter((route) => route.device === scope).map((route) => (
-            <span key={`${route.device}:${route.modulator}:${route.target}`}>M{route.modulator} → {route.target}</span>
-          ))}
-        </div>
+        <ModulationRouteList
+          routes={routes}
+          defaults={targetDefaults}
+          onPatch={onRoutePatch}
+          onDelete={onRouteDelete}
+        />
       </div>
     </section>
+  );
+}
+
+function ModulationRouteList({
+  routes,
+  defaults,
+  onPatch,
+  onDelete,
+}: {
+  routes: ModulationRoute[];
+  defaults: ParameterBag;
+  onPatch: (route: ModulationRoute, patch: Partial<ModulationRoute>) => void;
+  onDelete: (route: ModulationRoute) => void;
+}) {
+  if (routes.length === 0) {
+    return <p className="muted route-empty">No modulation targets captured.</p>;
+  }
+
+  return (
+    <div className="route-list">
+      {routes.map((route) => {
+        const invalid = getNestedParameter(defaults, route.target) === undefined;
+        const range = route.range ?? { min: 0, max: 1 };
+        return (
+          <div
+            key={`${route.device}:${route.modulator}:${route.target}`}
+            className={invalid ? "route-row invalid" : "route-row"}
+          >
+            <label className="toggle">
+              <input
+                type="checkbox"
+                checked={route.enabled !== false}
+                onChange={(event) => onPatch(route, { enabled: event.target.checked })}
+              />
+              <span>M{route.modulator}</span>
+            </label>
+            <label>
+              Source
+              <select value={route.source} onChange={(event) => onPatch(route, { source: event.target.value })}>
+                <option value="lfo">LFO</option>
+                <option value="velocity">Velocity</option>
+                <option value="step">Step</option>
+                <option value="choice">Choice</option>
+                <option value="random">Random</option>
+              </select>
+            </label>
+            <div className="route-target">
+              <strong>{route.target}</strong>
+              {invalid && <span>Invalid target</span>}
+            </div>
+            <label>
+              Amount
+              <input
+                type="range"
+                min={-1}
+                max={1}
+                step={0.01}
+                value={route.amount}
+                onChange={(event) => onPatch(route, { amount: Number(event.target.value) })}
+              />
+            </label>
+            <label>
+              Min
+              <input
+                type="number"
+                value={range.min}
+                onChange={(event) => onPatch(route, { range: { ...range, min: Number(event.target.value) } })}
+              />
+            </label>
+            <label>
+              Max
+              <input
+                type="number"
+                value={range.max}
+                onChange={(event) => onPatch(route, { range: { ...range, max: Number(event.target.value) } })}
+              />
+            </label>
+            <button onClick={() => onDelete(route)}><Trash2 size={14} /></button>
+          </div>
+        );
+      })}
+    </div>
   );
 }
 
@@ -1327,11 +1555,12 @@ function SliderControl({
   selectedEvent,
   lockCapture,
   modulationCapture,
+  voice,
   onParameter,
 }: ControlProps) {
   const value = Number(getNestedParameter(target, path) ?? 0);
   return (
-    <label className={controlClass(scope, path, selectedEvent, lockCapture, modulationCapture)}>
+    <label className={controlClass(scope, path, selectedEvent, lockCapture, modulationCapture, voice)}>
       <span>{label}</span>
       <input type="range" min={0} max={1} step={0.01} value={value} onChange={(event) => onParameter(path, Number(event.target.value))} />
       <strong>{value.toFixed(2)}</strong>
@@ -1347,6 +1576,7 @@ function NumberControl({
   selectedEvent,
   lockCapture,
   modulationCapture,
+  voice,
   onParameter,
   min = 0,
   max = 1,
@@ -1355,7 +1585,7 @@ function NumberControl({
   const rawValue = getNestedParameter(target, path);
   if (boolean) {
     return (
-      <label className={controlClass(scope, path, selectedEvent, lockCapture, modulationCapture)}>
+      <label className={controlClass(scope, path, selectedEvent, lockCapture, modulationCapture, voice)}>
         <span>{label}</span>
         <input type="checkbox" checked={rawValue === true} onChange={(event) => onParameter(path, event.target.checked)} />
       </label>
@@ -1363,7 +1593,7 @@ function NumberControl({
   }
 
   return (
-    <label className={controlClass(scope, path, selectedEvent, lockCapture, modulationCapture)}>
+    <label className={controlClass(scope, path, selectedEvent, lockCapture, modulationCapture, voice)}>
       <span>{label}</span>
       <input type="number" min={min} max={max} value={Number(rawValue ?? 0)} onChange={(event) => onParameter(path, Number(event.target.value))} />
     </label>
@@ -1378,17 +1608,18 @@ function TextControl({
   selectedEvent,
   lockCapture,
   modulationCapture,
+  voice,
   onParameter,
 }: ControlProps) {
   return (
-    <label className={controlClass(scope, path, selectedEvent, lockCapture, modulationCapture)}>
+    <label className={controlClass(scope, path, selectedEvent, lockCapture, modulationCapture, voice)}>
       <span>{label}</span>
       <input value={String(getNestedParameter(target, path) ?? "")} onChange={(event) => onParameter(path, event.target.value)} />
     </label>
   );
 }
 
-interface ControlProps extends Pick<DeviceEditorProps, "selectedEvent" | "lockCapture" | "modulationCapture" | "onParameter"> {
+interface ControlProps extends Pick<DeviceEditorProps, "voice" | "selectedEvent" | "lockCapture" | "modulationCapture" | "onParameter"> {
   label: string;
   path: string;
   target: ParameterBag;
@@ -1401,11 +1632,14 @@ function controlClass(
   selectedEvent: StepEvent | undefined,
   lockCapture: boolean,
   modulationCapture: ModulationCapture | null,
+  voice: ProgramVoice,
 ): string {
   const locked = getStepLocks(selectedEvent).some((lock) => lock.scope === scope && lock.path === path);
+  const modulated = getModulationRoutes(voice).some((route) => route.device === scope && route.target === path && route.enabled !== false);
   return [
     "control",
     locked ? "locked" : "",
+    modulated ? "modulated" : "",
     lockCapture ? "capture-ready" : "",
     modulationCapture?.device === scope ? "mod-target-ready" : "",
   ].join(" ");

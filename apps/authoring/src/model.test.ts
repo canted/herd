@@ -1,14 +1,17 @@
 import { describe, expect, it } from "vitest";
 import {
   clampStepCount,
+  clearModulationRoute,
   createBlankComposition,
   ensureStepEvent,
   getProgram,
+  getModulationRoutes,
   getStepLocks,
   getVoice,
   setModulationRoute,
   setNestedParameter,
   setStepEventLock,
+  updateModulationRoute,
   validateAuthoringComposition,
 } from "./model";
 
@@ -57,6 +60,8 @@ describe("authoring model", () => {
       source: "lfo",
       target: "filter.cutoff",
       amount: 0.35,
+      enabled: true,
+      range: { min: 0.1, max: 0.8 },
     });
 
     expect(voice.parameters?.modulationRoutes).toEqual([
@@ -66,8 +71,45 @@ describe("authoring model", () => {
         source: "lfo",
         target: "filter.cutoff",
         amount: 0.35,
+        enabled: true,
+        range: { min: 0.1, max: 0.8 },
       },
     ]);
+  });
+
+  it("updates and clears captured modulation routes", () => {
+    const composition = createBlankComposition();
+    const program = getProgram(composition, composition.programs[0]!.id);
+    const voice = getVoice(program, program.voices[0]!.id);
+
+    setModulationRoute(voice, {
+      device: "visualizer",
+      modulator: 2,
+      source: "choice",
+      target: "brightness",
+      amount: 0.2,
+    });
+    updateModulationRoute(voice, { device: "visualizer", modulator: 2, target: "brightness" }, {
+      amount: 0.65,
+      enabled: false,
+      range: { min: 0.2, max: 0.9 },
+    });
+
+    expect(getModulationRoutes(voice)).toEqual([
+      {
+        device: "visualizer",
+        modulator: 2,
+        source: "choice",
+        target: "brightness",
+        amount: 0.65,
+        enabled: false,
+        range: { min: 0.2, max: 0.9 },
+      },
+    ]);
+
+    clearModulationRoute(voice, { device: "visualizer", modulator: 2, target: "brightness" });
+
+    expect(getModulationRoutes(voice)).toEqual([]);
   });
 
   it("sets nested device parameters", () => {

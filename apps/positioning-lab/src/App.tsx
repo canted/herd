@@ -26,6 +26,7 @@ import {
 } from "./model";
 
 const roles: DeviceRole[] = ["beacon", "listener", "backupBeacon", "observer"];
+const configuredJoinOrigin = import.meta.env.VITE_POSITIONING_LAB_PUBLIC_ORIGIN as string | undefined;
 
 export function App() {
   const [sessionName, setSessionName] = useState("north-gallery-test");
@@ -35,7 +36,8 @@ export function App() {
   const [notes, setNotes] = useState("");
   const [qr, setQr] = useState("");
   const profile = chirpProfiles.find((candidate) => candidate.id === profileId) ?? chirpProfiles[1]!;
-  const joinUrl = `${window.location.origin}/positioning-device?session=${encodeURIComponent(sessionName)}`;
+  const joinOrigin = normalizeOrigin(configuredJoinOrigin ?? window.location.origin);
+  const joinUrl = `${joinOrigin}/positioning-device?session=${encodeURIComponent(sessionName)}`;
   const summary = latestScan === null ? null : summarizeScan(latestScan);
 
   useEffect(() => {
@@ -160,6 +162,10 @@ export function App() {
       </section>
     </main>
   );
+}
+
+function normalizeOrigin(origin: string): string {
+  return origin.replace(/\/+$/, "");
 }
 
 function ProfilePanel({

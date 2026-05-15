@@ -6,7 +6,7 @@ This repo currently implements the rehearsal vertical slice plus browser-based C
 
 - Host dashboard for creating a session, showing a QR/link, monitoring readiness, starting, stopping, forcing holding, and reviewing logs.
 - Participant mobile client for joining, unlocking audio, syncing clock, running the fixture, showing visuals, submitting a choice, recovering, and ending.
-- Authoring app for creating/editing Compositions, Programs, Voices, Step Events, Parameter Locks, device defaults, UI prompts, asset references, sampler zones, JSON files, and `.herd.zip` packages with media assets.
+- Authoring app for creating/editing Compositions, Programs, Voices, Step Events, Parameter Locks, modulation routes, device defaults, UI prompts, asset references, sampler zones, JSON files, and `.herd.zip` packages with media assets.
 - Sonic Positioning Lab prototype for role assignment, chirp profile selection, simulated scan evidence, relative layout preview, and evidence export.
 - In-memory Node/WebSocket server for session coordination.
 - Shared Composition, runtime, and protocol packages.
@@ -28,7 +28,11 @@ When `pnpm dev` is running:
 - Participant: http://localhost:5174
 - Authoring: http://localhost:5175
 - Positioning Lab: http://localhost:5176
-- Server health: http://localhost:8787/health
+- Server health: http://localhost:8787/healthz
+- Server readiness: http://localhost:8787/readyz
+- Server version: http://localhost:8787/version
+
+The Positioning Lab dev server binds to `0.0.0.0` and uses the machine's LAN IPv4 address for its device join QR/link. Override the advertised device URL with `POSITIONING_LAB_PUBLIC_ORIGIN=http://<host>:5176 pnpm dev:positioning` when needed.
 
 ## Authoring Packages
 
@@ -38,6 +42,18 @@ Use Export Package to download a `.herd.zip` archive containing:
 - media files referenced by the Composition assets
 
 Use Import Package to restore the archive into local authoring state. Imported package media is rehydrated for rehearsal launch and Participant sampler playback.
+
+## Creator Persistence Prototype
+
+The Authoring app includes a creator persistence panel for saving authored Compositions and creating package records through the local server API.
+
+The server currently includes:
+
+- creator Composition/package API endpoints
+- an in-memory creator store for local development and a Postgres-backed store when `DATABASE_URL` is configured
+- an initial Postgres migration for users, Compositions, and Packages
+- a migration runner: `pnpm --filter @herd/server db:migrate`
+- Tigris-compatible signed upload URL generation when `TIGRIS_ENDPOINT`, `TIGRIS_BUCKET`, `TIGRIS_ACCESS_KEY_ID`, and `TIGRIS_SECRET_ACCESS_KEY` are configured
 
 ## Positioning Lab
 
@@ -58,8 +74,9 @@ The Positioning Lab is a standalone controller prototype for acoustic positionin
 ## Current Limits
 
 - Sessions are in memory only.
-- Authoring saves to browser local storage and exports JSON; server-side persistence is not implemented.
-- Authoring supports local `.herd.zip` package archives; server-side package uploads and account asset libraries are not implemented.
+- Authoring saves to browser local storage, local `.herd.zip` archives, and local server creator endpoints. The local runtime uses memory by default and switches to Postgres when `DATABASE_URL` is configured.
+- Server-side package records and Tigris signed upload URL generation exist; actual durable package upload requires Tigris environment variables and deployed object storage credentials.
+- Email magic-link auth, account sessions, and account asset libraries are not implemented yet.
 - Participant runtime plays the minimal polyphonic SH-101-style synth path and embedded sampler audio zones; the full instrument engine is not implemented.
 - The Host and Participant apps are rehearsal-only and not public deployment-ready.
 - The Positioning Lab uses simulated scan evidence only; real acoustic chirp emission, microphone capture, correlation, and physical accuracy validation still require real devices.
