@@ -1,12 +1,12 @@
 # README artwork
 
-The current README uses `herd-crowd-v4.png`, a generated concept image with a slight ambient-light lift to reveal selected hands, arms, and face contours. Created by editing version 3 with the built-in image generation tool.
+`herd-crowd-v4.png` is an alternate version, a generated concept image with a slight ambient-light lift to reveal selected hands, arms, and face contours. Created by editing version 3 with the built-in image generation tool.
 
 ## Ambient-light revision prompt
 
 Make a very subtle lighting-only revision to this generated crowd concept image. Preserve exactly the composition, people, poses, quiet listening atmosphere, phones, blue-screen triangle/circle bubble buttons, single raised phone, small room, framing and deep-black background. The current darkness is nearly right. Add just a little dim diffuse cool ambient light, as if from a low-brightness screen behind the camera, outside the frame. Let this light reveal small selected patches of bodily form: a forearm and hand around a phone, the raised arm, a faint cheek plane, one ear distinguishable from dark hair, a trace of stubble on a face, a shoulder. Make these faintly illuminated surfaces with soft shading, not merely thin neon contour outlines. Most bodies and faces must remain black silhouettes; facial details must remain indistinct. Uneven, extremely restrained illumination, slightly clearer foreground hands and arms with occasional dim midground face hints. Keep at least three quarters of the image in near-black deep shadow. No overall exposure boost, no bright faces, no portrait lighting, no warm room lighting, no visible added light source, no new objects, no conversational gestures, no new people. The phones remain by far the brightest objects. Original generated concept art, subtle realistic low-light photography.
 
-`herd-crowd-v3.png` is the third version: a darker revision with mostly silhouetted listeners and illuminated phones. It was edited with the built-in image generation tool. The supplied reference photographs guided exposure and visibility only; they are not included in the repository.
+The current README uses `herd-crowd-v3.png`: a darker revision with mostly silhouetted listeners and illuminated phones. It was edited with the built-in image generation tool. The supplied reference photographs guided exposure and visibility only; they are not included in the repository.
 
 ## Darkness revision prompt
 
