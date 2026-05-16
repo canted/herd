@@ -1,5 +1,11 @@
 # README artwork
 
+The current README uses `herd-crowd-v3.png`: a darker revision with mostly silhouetted listeners and illuminated phones. It was edited with the built-in image generation tool. The supplied reference photographs guided exposure and visibility only; they are not included in the repository.
+
+## Darkness revision prompt
+
+Edit image 1, the generated Herd concept still. Images 2 and 3 are ONLY references for darkness and how little human detail should be visible; do not copy their subjects or installations. Make image 1 radically darker: nearly black room and mostly black human silhouettes, with only very faint blue/violet edge light on an occasional cheek or hand. Suppress facial features, hair texture, clothing texture, wall texture; the room and people should be hinted at, as in the reference photographs. No ambient warm fill lighting, no lifted shadows, no HDR, no portrait lighting. The luminous phones are the visual subject against darkness. Preserve the small intimate room and roughly twenty people, wide composition and only one phone held overhead. CHANGE body language: the people are quietly absorbed in listening to a shared sound performance. No face-to-face conversation, no laughing, no talking mouths, no conversational hand gestures. Most heads look out into the dark room with calm closed mouths, some look at phones. Faces should be too dark to study, almost anonymous silhouettes. Preserve the blue phone screens with two soft rounded bubble buttons containing triangle and circle symbols, and pink and pale yellow phone screens. Keep a few foreground blue screens legible, with restrained local glow that barely reveals fingers and does not light entire faces or torsos. Deep true blacks occupy most of the picture; sparse colored screens and subtle silhouettes create depth. No mesh, strings, sculptures, stage, spotlights, lasers, text overlays or watermarks. Original generated concept image.
+
 `herd-crowd.png` is an original AI-generated concept image made with the built-in image generation tool. It illustrates the intended experience and is not a photograph of a Herd performance.
 
 ## Generation prompt
@@ -8,7 +14,7 @@ Use case: photorealistic-natural. Asset type: original wide landscape hero still
 
 ## Revised still
 
-`herd-crowd-v2.png` is the README image, edited with the built-in image generation tool from the first generated still. The blue-screen controls illustrate a proposed visual treatment, not a screenshot of the current participant app.
+`herd-crowd-v2.png` is the second version, edited with the built-in image generation tool from the first generated still. The blue-screen controls illustrate a proposed visual treatment, not a screenshot of the current participant app.
 
 ### Revision prompt
 

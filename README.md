@@ -4,7 +4,7 @@ Herd is a participatory sound and light performance for a room full of phones. P
 
 *Herd is a work in progress. The experience below describes the intended performance; the current implementation supports authoring and browser rehearsals.*
 
-![A dark room filled with people holding phones, their screens casting colored light across the crowd.](docs/images/herd-crowd-v2.png)
+![A dark room filled with people holding phones, their screens casting colored light across the crowd.](docs/images/herd-crowd-v3.png)
 
 *Generated concept image.*
 
