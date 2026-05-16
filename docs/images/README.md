@@ -1,0 +1,7 @@
+# README artwork
+
+`herd-crowd.png` is an original AI-generated concept image made with the built-in image generation tool. It illustrates the intended experience and is not a photograph of a Herd performance.
+
+## Generation prompt
+
+Use case: photorealistic-natural. Asset type: original wide landscape hero still for Herd GitHub README. Create an original photographic concept visualization of a participatory electronic sound and light performance: a dense gathering of adults in a dark, plain indoor room, every visible participant holding a smartphone with a simple luminous full-screen color. View from within the crowd at slightly elevated head height, looking across people toward more people, with natural overlapping silhouettes and depth. Some phones at chest height illuminate faces and hands, others held at shoulder height or overhead; people face different directions and interact with their own phones and nearby participants. Screens form loose patches of blue, violet, pink and warm white light across the room. Documentary photography, believable low-light exposure, subtle grain, natural human anatomy and phone grips, restrained screen glow, deep shadows with enough detail to read the crowd. The people and their phones are the entire subject. Wide 16:9 framing without letterboxing. No stage performer, no installation sculptures, no strings, no web mesh, no lasers, no overhead luminous structures, no giant screen, no floating graphics, no text, no logos, no watermark. Do not reproduce any existing project photograph or GIF.

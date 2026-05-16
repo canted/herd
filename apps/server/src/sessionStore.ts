@@ -3,8 +3,10 @@ import {
   summarizeReadiness,
   type ChoiceSnapshot,
   type EventLogEntry,
+  type HostOverride,
   type ParticipantReport,
   type ParticipantSnapshot,
+  type PositioningMeasurement,
   type PublicSessionInfo,
   type SessionPhase,
   type SessionSnapshot,
@@ -21,6 +23,7 @@ export interface SessionRecord {
   transportStartTimeMs?: number;
   participants: Map<string, ParticipantSnapshot>;
   choices: Map<string, ChoiceSnapshot>;
+  hostOverrides: HostOverride[];
   logs: EventLogEntry[];
 }
 
@@ -47,6 +50,7 @@ export class SessionStore {
       createdAt: now,
       participants: new Map(),
       choices: new Map(),
+      hostOverrides: [],
       logs: [],
     };
 
@@ -57,6 +61,10 @@ export class SessionStore {
 
   getSession(code: string): SessionRecord | undefined {
     return this.sessionsByCode.get(code.toUpperCase());
+  }
+
+  sessionCount(): number {
+    return this.sessionsByCode.size;
   }
 
   getPublicSession(code: string, now = Date.now()): PublicSessionInfo | undefined {
@@ -173,6 +181,39 @@ export class SessionStore {
     return this.snapshot(session, now);
   }
 
+  recordHostOverride(
+    code: string,
+    override: Omit<HostOverride, "id" | "createdAt">,
+    now = Date.now(),
+  ): SessionSnapshot {
+    const session = this.requireSession(code);
+    const record: HostOverride = {
+      ...override,
+      id: `override-${this.logCounter++}`,
+      createdAt: now,
+    };
+
+    session.hostOverrides.push(record);
+    this.addLog(session, "warning", `Host override: ${override.type}.`, now);
+    return this.snapshot(session, now);
+  }
+
+  recordPositioningMeasurements(
+    code: string,
+    participantId: string,
+    measurements: readonly PositioningMeasurement[],
+    now = Date.now(),
+  ): SessionSnapshot {
+    const session = this.requireSession(code);
+    this.addLog(
+      session,
+      measurements.some((measurement) => !measurement.detected) ? "warning" : "info",
+      `${participantId} uploaded ${measurements.length} positioning measurements.`,
+      now,
+    );
+    return this.snapshot(session, now);
+  }
+
   snapshotByCode(code: string, now = Date.now()): SessionSnapshot {
     return this.snapshot(this.requireSession(code), now);
   }
@@ -193,6 +234,7 @@ export class SessionStore {
         : { transportStartTimeMs: session.transportStartTimeMs }),
       participants,
       choices: [...session.choices.values()].sort((a, b) => `${a.promptId}:${a.choiceId}`.localeCompare(`${b.promptId}:${b.choiceId}`)),
+      hostOverrides: session.hostOverrides.slice(-40),
       logs: session.logs.slice(-80),
       readiness: summarizeReadiness(participants, session.phase),
     };

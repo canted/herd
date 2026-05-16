@@ -18,7 +18,20 @@ import {
   playSynthEvent,
 } from "./audio";
 
-const serverBase = import.meta.env.VITE_SERVER_URL ?? "http://localhost:8787";
+const serverBase = isLocalDevPort("5174")
+  ? import.meta.env.VITE_SERVER_URL ?? "http://localhost:8787"
+  : window.location.origin;
+
+interface WebKitAudioWindow extends Window {
+  webkitAudioContext?: typeof AudioContext;
+}
+
+function isLocalDevPort(port: string): boolean {
+  return (
+    window.location.port === port &&
+    ["localhost", "127.0.0.1", "0.0.0.0", "::1", "[::1]"].includes(window.location.hostname)
+  );
+}
 
 type ParticipantPhase = "entry" | "connecting" | "holding" | "live" | "ended" | "recovery" | "error";
 
@@ -63,7 +76,7 @@ export function App() {
   const report = useMemo<ParticipantReport>(() => {
     const visibility = document.visibilityState === "hidden" ? "hidden" : "visible";
     const capability: ParticipantReport["capability"] = {
-      webAudio: typeof AudioContext !== "undefined",
+      webAudio: canCreateAudioContext(),
       audioWorklet: audioRef.current?.audioWorklet !== undefined,
       wasm: typeof WebAssembly !== "undefined",
       degradedReasons:
@@ -116,7 +129,7 @@ export function App() {
     const interval = window.setInterval(() => {
       send({
         type: "clockPing",
-        id: crypto.randomUUID(),
+        id: createBrowserId("clock"),
         clientSentAt: Date.now(),
       });
     }, 1200);
@@ -134,7 +147,7 @@ export function App() {
     setPhase("connecting");
 
     try {
-      const context = new AudioContext();
+      const context = createAudioContext();
       await context.resume();
       audioRef.current = context;
       setAudioStatus("unlocked");
@@ -169,7 +182,7 @@ export function App() {
       setPhase("holding");
       send({
         type: "clockPing",
-        id: crypto.randomUUID(),
+        id: createBrowserId("clock"),
         clientSentAt: Date.now(),
       });
     });
@@ -437,9 +450,39 @@ function getParticipantId(): string {
   const key = "herd.participantId";
   const existing = localStorage.getItem(key);
   if (existing !== null) return existing;
-  const created = crypto.randomUUID();
+  const created = createBrowserId("participant");
   localStorage.setItem(key, created);
   return created;
+}
+
+function canCreateAudioContext(): boolean {
+  return window.AudioContext !== undefined || (window as WebKitAudioWindow).webkitAudioContext !== undefined;
+}
+
+function createAudioContext(): AudioContext {
+  const AudioContextConstructor = window.AudioContext ?? (window as WebKitAudioWindow).webkitAudioContext;
+  if (AudioContextConstructor === undefined) {
+    throw new Error("Web Audio is unavailable in this browser.");
+  }
+  return new AudioContextConstructor();
+}
+
+function createBrowserId(prefix: string): string {
+  const randomUUID = globalThis.crypto?.randomUUID;
+  if (typeof randomUUID === "function") {
+    return `${prefix}-${randomUUID.call(globalThis.crypto)}`;
+  }
+
+  const bytes = new Uint8Array(16);
+  if (typeof globalThis.crypto?.getRandomValues === "function") {
+    globalThis.crypto.getRandomValues(bytes);
+    bytes[6] = ((bytes[6] ?? 0) & 0x0f) | 0x40;
+    bytes[8] = ((bytes[8] ?? 0) & 0x3f) | 0x80;
+    const hex = [...bytes].map((byte) => byte.toString(16).padStart(2, "0"));
+    return `${prefix}-${hex.slice(0, 4).join("")}-${hex.slice(4, 6).join("")}-${hex.slice(6, 8).join("")}-${hex.slice(8, 10).join("")}-${hex.slice(10).join("")}`;
+  }
+
+  return `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 12)}`;
 }
 
 function inferProgram(snapshot: SessionSnapshot | null): string | undefined {

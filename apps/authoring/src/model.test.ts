@@ -3,6 +3,7 @@ import {
   clampStepCount,
   clearModulationRoute,
   createBlankComposition,
+  createProgram,
   ensureStepEvent,
   getProgram,
   getModulationRoutes,
@@ -20,8 +21,16 @@ describe("authoring model", () => {
     const composition = createBlankComposition();
     const summary = validateAuthoringComposition(composition);
 
-    expect(summary.errors).toEqual([]);
-    expect(composition.programs[0]?.voices[0]?.pattern.stepCount).toBe(16);
+    expect(composition.programs).toEqual([]);
+    expect(composition.programSequencer.steps).toEqual([]);
+    expect(summary.errors).toContain('$.programSequencer.initialProgramId: Initial program "" is not defined.');
+  });
+
+  it("creates new Programs with a clean Pattern", () => {
+    const program = createProgram();
+
+    expect(program.voices[0]?.pattern.stepCount).toBe(16);
+    expect(program.voices[0]?.pattern.stepEvents).toEqual([]);
   });
 
   it("clamps Pattern step counts to the supported 1..64 range", () => {
@@ -32,7 +41,7 @@ describe("authoring model", () => {
 
   it("sets Parameter Locks on Parameter-only Step Events", () => {
     const composition = createBlankComposition();
-    const program = getProgram(composition, composition.programs[0]!.id);
+    const program = attachProgram(composition);
     const voice = getVoice(program, program.voices[0]!.id);
     const event = ensureStepEvent(voice, 7);
 
@@ -51,7 +60,7 @@ describe("authoring model", () => {
 
   it("stores captured modulation routes on the Voice", () => {
     const composition = createBlankComposition();
-    const program = getProgram(composition, composition.programs[0]!.id);
+    const program = attachProgram(composition);
     const voice = getVoice(program, program.voices[0]!.id);
 
     setModulationRoute(voice, {
@@ -79,7 +88,7 @@ describe("authoring model", () => {
 
   it("updates and clears captured modulation routes", () => {
     const composition = createBlankComposition();
-    const program = getProgram(composition, composition.programs[0]!.id);
+    const program = attachProgram(composition);
     const voice = getVoice(program, program.voices[0]!.id);
 
     setModulationRoute(voice, {
@@ -114,7 +123,7 @@ describe("authoring model", () => {
 
   it("sets nested device parameters", () => {
     const composition = createBlankComposition();
-    const program = getProgram(composition, composition.programs[0]!.id);
+    const program = attachProgram(composition);
     const voice = getVoice(program, program.voices[0]!.id);
 
     setNestedParameter(voice.instrument.defaults, "filter.cutoff", 0.61);
@@ -123,6 +132,16 @@ describe("authoring model", () => {
       cutoff: 0.61,
       resonance: 0.2,
       envelopeAmount: 0.35,
+      modulationAmount: 0.1,
+      keyboardTracking: 0.3,
     });
   });
 });
+
+function attachProgram(composition: ReturnType<typeof createBlankComposition>) {
+  const program = createProgram();
+  composition.programs.push(program);
+  composition.programSequencer.initialProgramId = program.id;
+  composition.programSequencer.steps.push({ programId: program.id });
+  return getProgram(composition, program.id);
+}

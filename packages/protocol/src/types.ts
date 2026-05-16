@@ -6,6 +6,8 @@ export type AudioStatus = "locked" | "unlocked" | "failed";
 export type AssetStatus = "unknown" | "loaded" | "failed";
 export type VisibilityStatus = "visible" | "hidden";
 export type ReadinessStatus = "ready" | "degraded" | "blocked";
+export type PermissionStatus = "unknown" | "granted" | "denied" | "notRequired";
+export type PositioningStatus = "notRequired" | "calibrating" | "fresh" | "stale" | "unlocated" | "disabled" | "failedScan";
 
 export interface ClockQuality {
   offsetMs: number;
@@ -20,7 +22,43 @@ export interface CapabilityProfile {
   sampleRate?: number;
   audioWorklet?: boolean;
   wasm?: boolean;
+  wakeLock?: boolean;
+  reducedMotion?: boolean;
   degradedReasons: string[];
+}
+
+export interface PermissionProfile {
+  microphone: PermissionStatus;
+  motion: PermissionStatus;
+}
+
+export interface BatteryProfile {
+  level: number;
+  charging: boolean;
+}
+
+export interface ProgramCursor {
+  programId: string;
+  programStartTimeMs?: number;
+  patternPosition?: number;
+  loopCount?: number;
+  queuedProgramId?: string;
+  progressionPolicy?: "independent" | "lockstep" | "boundedCatchUp" | "forced";
+}
+
+export interface VoiceAssignmentSnapshot {
+  voiceId: string;
+  state: "assigned" | "pendingBoundary" | "fallbackVoice" | "hostAssigned";
+  queuedVoiceId?: string;
+}
+
+export interface PositioningSnapshot {
+  status: PositioningStatus;
+  scanId?: string;
+  x?: number;
+  y?: number;
+  confidence?: number;
+  updatedAt?: number;
 }
 
 export interface ParticipantReport {
@@ -29,6 +67,11 @@ export interface ParticipantReport {
   visibility: VisibilityStatus;
   clock: ClockQuality | null;
   capability: CapabilityProfile;
+  permissions?: PermissionProfile;
+  battery?: BatteryProfile;
+  positioning?: PositioningSnapshot;
+  programCursor?: ProgramCursor;
+  voiceAssignment?: VoiceAssignmentSnapshot;
   programId?: string;
   voiceId?: string;
 }
@@ -54,6 +97,40 @@ export interface EventLogEntry {
   message: string;
 }
 
+export interface HostOverride {
+  id: string;
+  type: "stop" | "forceHolding" | "disablePositioning" | "disableShaker" | "forceProgram";
+  hostUserId?: string;
+  targetProgramId?: string;
+  participantIds?: string[];
+  createdAt: number;
+}
+
+export interface ScanSchedule {
+  scanId: string;
+  profileId: string;
+  serverStartTimeMs: number;
+  beaconSlots: Array<{
+    beaconDeviceId: string;
+    code: string;
+    startOffsetMs: number;
+    durationMs: number;
+  }>;
+  guardMs: number;
+}
+
+export interface PositioningMeasurement {
+  scanId: string;
+  listenerDeviceId: string;
+  beaconDeviceId: string;
+  detected: boolean;
+  arrivalTimeMs: number | null;
+  confidence: number;
+  snr: number | null;
+  peakWidthMs: number | null;
+  processingMs: number;
+}
+
 export interface ReadinessSummary {
   status: ReadinessStatus;
   readyCount: number;
@@ -77,6 +154,7 @@ export interface SessionSnapshot {
   participants: ParticipantSnapshot[];
   choices: ChoiceSnapshot[];
   logs: EventLogEntry[];
+  hostOverrides?: HostOverride[];
   readiness: ReadinessSummary;
 }
 
@@ -93,9 +171,11 @@ export type ClientToServerMessage =
   | { type: "clockPing"; id: string; clientSentAt: number }
   | { type: "participantReport"; report: ParticipantReport }
   | { type: "participantChoice"; promptId: string; choiceId: string }
+  | { type: "positioningMeasurements"; measurements: PositioningMeasurement[] }
   | { type: "hostStart"; leadTimeMs?: number }
   | { type: "hostStop" }
-  | { type: "hostForceHolding" };
+  | { type: "hostForceHolding" }
+  | { type: "hostOverride"; override: Omit<HostOverride, "id" | "createdAt"> };
 
 export type ServerToClientMessage =
   | { type: "snapshot"; snapshot: SessionSnapshot }
@@ -109,6 +189,7 @@ export type ServerToClientMessage =
     }
   | { type: "prepareStart"; transportStartTimeMs: number; serverTimeMs: number }
   | { type: "startConfirmed"; transportStartTimeMs: number; serverTimeMs: number }
+  | { type: "scanSchedule"; schedule: ScanSchedule; serverTimeMs: number }
   | { type: "stopped"; serverTimeMs: number }
   | { type: "holdingForced"; serverTimeMs: number }
   | { type: "error"; message: string };

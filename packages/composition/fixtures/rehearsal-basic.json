@@ -49,7 +49,6 @@
             "stepCount": 16,
             "tempoBpm": 120,
             "stepDurationBeats": 0.25,
-            "repetitions": 2,
             "stepEvents": [
               {
                 "step": 0,
@@ -172,7 +171,6 @@
             "stepCount": 8,
             "tempoBpm": 90,
             "stepDurationBeats": 0.5,
-            "repetitions": 1,
             "stepEvents": [
               {
                 "step": 0,

@@ -18,8 +18,20 @@ import type {
   SessionSnapshot,
 } from "@herd/protocol";
 
-const serverBase = import.meta.env.VITE_SERVER_URL ?? "http://localhost:8787";
-const participantBase = import.meta.env.VITE_PARTICIPANT_URL ?? "http://localhost:5174";
+const runsOnHostDevServer = isLocalDevPort("5173");
+const serverBase = runsOnHostDevServer
+  ? import.meta.env.VITE_SERVER_URL ?? "http://localhost:8787"
+  : window.location.origin;
+const participantBase = runsOnHostDevServer
+  ? import.meta.env.VITE_PARTICIPANT_URL ?? "http://localhost:5174"
+  : `${window.location.origin}/join`;
+
+function isLocalDevPort(port: string): boolean {
+  return (
+    window.location.port === port &&
+    ["localhost", "127.0.0.1", "0.0.0.0", "::1", "[::1]"].includes(window.location.hostname)
+  );
+}
 
 type ConnectionState = "idle" | "connecting" | "connected" | "offline" | "error";
 

@@ -45,9 +45,6 @@ export function seedCompositions(): Composition[] {
 }
 
 export function createBlankComposition(): Composition {
-  const programId = createId("program");
-  const voiceId = createId("voice");
-
   return {
     schemaVersion: COMPOSITION_SCHEMA_VERSION,
     id: createId("composition"),
@@ -58,8 +55,8 @@ export function createBlankComposition(): Composition {
     parameters: {},
     programSequencer: {
       mode: "linear",
-      initialProgramId: programId,
-      steps: [{ programId }],
+      initialProgramId: "",
+      steps: [],
       transitionPolicy: {
         defaultBoundary: "patternLoopEnd",
         lateClientPolicy: "compositionRule",
@@ -68,7 +65,7 @@ export function createBlankComposition(): Composition {
         mode: "independent",
       },
     },
-    programs: [createProgram(programId, voiceId, "Intro")],
+    programs: [],
     defaults: {},
   };
 }
@@ -138,34 +135,10 @@ export function createVoice(id = createId("voice")): ProgramVoice {
       stepCount: 16,
       tempoBpm: 120,
       stepDurationBeats: 0.25,
-      repetitions: 4,
-      stepEvents: [
-        {
-          step: 0,
-          instrumentTrigger: { enabled: true, durationMs: 180 },
-          visualizerTrigger: { enabled: true, durationMs: 240 },
-          parameterLocks: {
-            instrument: { pitch: "C3", velocity: 90 },
-            visualizer: { shape: "ring", brightness: 0.82 },
-          },
-        },
-      ],
+      stepEvents: [],
     },
     instrument: createInstrument(),
     visualizer: createVisualizer(),
-    ui: {
-      id: createId("ui"),
-      type: "choicePrompt",
-      prompt: {
-        id: createId("prompt"),
-        text: "Choose a path",
-        applyBoundary: "patternLoopEnd",
-        choices: [
-          { id: createId("choice"), label: "Left" },
-          { id: createId("choice"), label: "Right" },
-        ],
-      },
-    },
     parameters: {
       modulationRoutes: [],
     },
@@ -180,27 +153,46 @@ export function createInstrument(): InstrumentDevice {
       pitch: "C3",
       velocity: 84,
       durationMs: 180,
+      tune: 0,
+      volume: 0.72,
+      portamento: 0,
+      portamentoMode: "off",
+      transpose: "middle",
       oscillator: {
         saw: true,
         pulse: true,
         sub: true,
+        sawLevel: 0.75,
+        pulseLevel: 0.6,
+        subLevel: 0.55,
         noise: 0.04,
         pulseWidth: 0.5,
+        pulseWidthSource: "manual",
+        modulationAmount: 0.1,
+        range: "8",
+        subMode: "oneOctSquare",
       },
       filter: {
         cutoff: 0.42,
         resonance: 0.2,
         envelopeAmount: 0.35,
+        modulationAmount: 0.1,
+        keyboardTracking: 0.3,
       },
       lfo: {
         rate: 0.22,
         amount: 0.1,
+        waveform: "triangle",
+      },
+      vca: {
+        mode: "envelope",
       },
       envelope: {
         attackMs: 5,
         decayMs: 120,
         sustain: 0.35,
         releaseMs: 90,
+        gateMode: "gateTrigger",
       },
       gain: 0.72,
       glide: 0,

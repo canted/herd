@@ -11,10 +11,12 @@
     "dev:participant": "pnpm --filter @herd/participant dev",
     "dev:authoring": "pnpm --filter @herd/authoring dev",
     "dev:positioning": "pnpm --filter @herd/positioning-lab dev",
+    "dev:cert": "node scripts/dev-cert.mjs",
     "build": "pnpm -r --if-present build",
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
-    "check": "pnpm typecheck && pnpm test"
+    "check": "pnpm typecheck && pnpm test",
+    "smoke": "node scripts/smoke.mjs"
   },
   "devDependencies": {
     "@types/node": "^25.8.0",

@@ -1,0 +1,56 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.28.2
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm check
+      - run: pnpm build
+      - run: docker build -t herd:${{ github.sha }} .
+
+  deploy-staging:
+    needs: verify
+    if: github.ref == 'refs/heads/main' && vars.FLY_STAGING_APP != ''
+    runs-on: ubuntu-latest
+    environment: staging
+    steps:
+      - uses: actions/checkout@v5
+      - uses: superfly/flyctl-actions/setup-flyctl@master
+      - run: flyctl deploy --remote-only --config fly.toml --app "$FLY_STAGING_APP"
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+          FLY_STAGING_APP: ${{ vars.FLY_STAGING_APP }}
+      - run: SMOKE_BASE_URL="https://${FLY_STAGING_APP}.fly.dev" node scripts/smoke.mjs
+        env:
+          FLY_STAGING_APP: ${{ vars.FLY_STAGING_APP }}
+
+  deploy-production:
+    needs: deploy-staging
+    if: github.ref == 'refs/heads/main' && vars.FLY_PRODUCTION_APP != ''
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: actions/checkout@v5
+      - uses: superfly/flyctl-actions/setup-flyctl@master
+      - run: flyctl deploy --remote-only --config fly.toml --app "$FLY_PRODUCTION_APP"
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+          FLY_PRODUCTION_APP: ${{ vars.FLY_PRODUCTION_APP }}
+      - run: SMOKE_BASE_URL="https://${FLY_PRODUCTION_APP}.fly.dev" node scripts/smoke.mjs
+        env:
+          FLY_PRODUCTION_APP: ${{ vars.FLY_PRODUCTION_APP }}

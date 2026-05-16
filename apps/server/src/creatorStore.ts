@@ -20,6 +20,10 @@ export interface PackageRecord {
   version: number;
   objectKey: string;
   status: "pendingUpload" | "ready";
+  contentType?: string;
+  sizeBytes?: number;
+  sha256?: string;
+  uploadConfirmedAt?: number;
   createdAt: number;
   updatedAt: number;
 }
@@ -35,6 +39,14 @@ export interface CreatePackageInput {
   filename?: string;
 }
 
+export interface ConfirmPackageUploadInput {
+  ownerEmail: string;
+  packageId: string;
+  contentType: string;
+  sizeBytes: number;
+  sha256: string;
+}
+
 export type MaybePromise<T> = T | Promise<T>;
 
 export interface CreatorRepository {
@@ -42,6 +54,8 @@ export interface CreatorRepository {
   saveComposition(input: SaveCompositionInput, now?: number): MaybePromise<CompositionRecord>;
   listCompositions(ownerEmail: string): MaybePromise<CompositionRecord[]>;
   createPackage(input: CreatePackageInput, now?: number): MaybePromise<PackageRecord>;
+  getPackage(ownerEmail: string, packageId: string): MaybePromise<PackageRecord | null>;
+  confirmPackageUpload(input: ConfirmPackageUploadInput, now?: number): MaybePromise<PackageRecord>;
   listPackages(ownerEmail: string): MaybePromise<PackageRecord[]>;
 }
 
@@ -105,6 +119,36 @@ export class CreatorStore implements CreatorRepository {
     packages.push(record);
     this.packagesByOwner.set(ownerEmail, packages);
     return record;
+  }
+
+  getPackage(ownerEmail: string, packageId: string): PackageRecord | null {
+    const normalized = normalizeOwnerEmail(ownerEmail);
+    return (this.packagesByOwner.get(normalized) ?? []).find((record) => record.id === packageId) ?? null;
+  }
+
+  confirmPackageUpload(input: ConfirmPackageUploadInput, now = Date.now()): PackageRecord {
+    const normalized = normalizeOwnerEmail(input.ownerEmail);
+    const packages = this.packagesByOwner.get(normalized) ?? [];
+    const index = packages.findIndex((record) => record.id === input.packageId);
+    const existing = packages[index];
+
+    if (existing === undefined) {
+      throw new Error(`Package "${input.packageId}" was not found.`);
+    }
+
+    const updated: PackageRecord = {
+      ...existing,
+      status: "ready",
+      contentType: input.contentType,
+      sizeBytes: input.sizeBytes,
+      sha256: input.sha256,
+      uploadConfirmedAt: now,
+      updatedAt: now,
+    };
+
+    packages[index] = updated;
+    this.packagesByOwner.set(normalized, packages);
+    return updated;
   }
 
   listPackages(ownerEmail: string): PackageRecord[] {

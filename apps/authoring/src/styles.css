@@ -252,8 +252,13 @@ p {
 }
 
 .section-title {
-  justify-content: flex-start;
   margin-bottom: 0.8rem;
+}
+
+.section-title-copy {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.75rem;
 }
 
 .section-title h2,
@@ -274,6 +279,24 @@ p {
   border-radius: 8px;
   padding: 0.5rem;
   background: #141310;
+}
+
+.program-empty-card {
+  flex: 0 0 220px;
+  display: grid;
+  align-content: center;
+  gap: 0.25rem;
+  min-height: 76px;
+  border: 1px dashed rgba(255, 255, 255, 0.14);
+  border-radius: 8px;
+  padding: 0.75rem;
+  color: #d8d1c4;
+  background: #141310;
+}
+
+.program-empty-card span {
+  color: #9e9688;
+  font-size: 0.76rem;
 }
 
 .program-step.selected {
@@ -358,9 +381,14 @@ p {
 
 .pattern-controls {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: minmax(0, 0.55fr) minmax(0, 1.45fr);
   gap: 0.75rem;
   margin-bottom: 0.8rem;
+}
+
+.range-field strong {
+  color: #f4f0e8;
+  font-size: 0.76rem;
 }
 
 .layer-toggles,
@@ -413,11 +441,23 @@ p {
 
 .step-cell small {
   position: absolute;
-  inset: auto 3px 3px 3px;
+  inset: auto 4px 4px 4px;
+  display: flex;
+  justify-content: center;
+  gap: 3px;
   min-height: 10px;
-  color: #10100e;
-  font-size: 0.58rem;
-  font-weight: 950;
+}
+
+.step-cell small i {
+  display: block;
+  width: 5px;
+  height: 5px;
+  border-radius: 999px;
+  background: rgba(244, 240, 232, 0.22);
+}
+
+.step-cell small i.active {
+  background: #10100e;
 }
 
 .step-cell.has-instrument {
@@ -426,17 +466,6 @@ p {
 
 .step-cell.has-visualizer {
   box-shadow: inset 0 0 0 3px #8ec5ff;
-}
-
-.step-cell.has-locks::after {
-  content: "";
-  position: absolute;
-  top: 3px;
-  right: 3px;
-  width: 7px;
-  height: 7px;
-  border-radius: 999px;
-  background: #f2d35d;
 }
 
 .step-cell.selected {
@@ -451,6 +480,69 @@ p {
   gap: 0.75rem;
   border-top: 1px solid rgba(255, 255, 255, 0.1);
   padding-top: 0.75rem;
+}
+
+.step-note-editor {
+  display: grid;
+  gap: 0.72rem;
+  margin-bottom: 0.85rem;
+}
+
+.pitch-grid {
+  display: grid;
+  grid-template-columns: repeat(72, 12px);
+  gap: 2px;
+  overflow-x: auto;
+  padding-bottom: 0.1rem;
+}
+
+.pitch-cell {
+  display: grid;
+  grid-template-rows: 12px 12px;
+  gap: 2px;
+  min-width: 12px;
+  min-height: 26px;
+  border: 0;
+  border-radius: 0;
+  padding: 0;
+  background: transparent;
+}
+
+.pitch-cell span,
+.pitch-cell i {
+  display: block;
+  width: 12px;
+  height: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+}
+
+.pitch-cell.white-key span {
+  background: #e7dfd0;
+}
+
+.pitch-cell.black-key span {
+  background: #11100e;
+}
+
+.pitch-cell i {
+  background: #11100e;
+}
+
+.pitch-cell.active i {
+  border-color: #a7f3a0;
+  background: #a7f3a0;
+  box-shadow: 0 0 0 1px rgba(167, 243, 160, 0.34);
+}
+
+.pitch-cell:focus-visible {
+  outline: 2px solid #f2d35d;
+  outline-offset: 2px;
+}
+
+.step-note-sliders {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 0.75rem;
 }
 
 .armed-button {
@@ -491,6 +583,34 @@ p {
   gap: 0.65rem;
 }
 
+.sh101-panel {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: 92px minmax(150px, 0.65fr) minmax(230px, 1fr) minmax(300px, 1.2fr) minmax(300px, 1.2fr) 92px minmax(300px, 1.1fr) minmax(260px, 0.9fr);
+  gap: 0.55rem;
+  overflow-x: auto;
+  padding-bottom: 0.2rem;
+}
+
+.synth-block {
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 6px;
+  padding: 0.55rem;
+  background: #141310;
+}
+
+.synth-block h3 {
+  margin-bottom: 0.55rem;
+  color: #f4f0e8;
+  letter-spacing: 0;
+}
+
+.synth-controls {
+  display: flex;
+  align-items: stretch;
+  gap: 0.42rem;
+}
+
 .control {
   position: relative;
   min-height: 72px;
@@ -500,6 +620,28 @@ p {
   background:
     radial-gradient(circle at 50% 16%, rgba(255, 255, 255, 0.05), transparent 34%),
     #141310;
+}
+
+.vertical-control {
+  align-items: center;
+  justify-items: center;
+  min-width: 46px;
+  min-height: 154px;
+  padding: 0.45rem 0.35rem;
+  text-align: center;
+}
+
+.vertical-control > span {
+  min-height: 30px;
+  font-size: 0.62rem;
+  line-height: 1.1;
+}
+
+.vertical-control input[type="range"] {
+  width: 22px;
+  height: 88px;
+  writing-mode: vertical-lr;
+  direction: rtl;
 }
 
 .control.locked {
@@ -545,6 +687,83 @@ p {
 .control strong {
   color: #f4f0e8;
   font-size: 0.76rem;
+}
+
+.mod-target-overlay {
+  position: absolute;
+  inset: auto 6px 6px;
+  z-index: 2;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 0.35rem;
+  align-items: center;
+  border: 1px solid rgba(142, 197, 255, 0.42);
+  border-radius: 5px;
+  padding: 0.25rem;
+  background: rgba(13, 21, 30, 0.94);
+}
+
+.mod-target-overlay span {
+  color: #8ec5ff;
+  font-size: 0.62rem;
+  font-weight: 950;
+}
+
+.mod-target-overlay button {
+  min-height: 24px;
+  padding: 0 0.35rem;
+  font-size: 0.64rem;
+}
+
+.visual-preview-card {
+  grid-column: span 2;
+  display: grid;
+  grid-template-columns: 72px minmax(0, 1fr);
+  gap: 0.75rem;
+  align-items: center;
+  min-height: 92px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+  padding: 0.7rem;
+  background:
+    linear-gradient(135deg, hsl(var(--preview-hue) var(--preview-saturation) calc(var(--preview-brightness) * 0.7)), rgba(255, 255, 255, 0.04)),
+    #141310;
+}
+
+.visual-preview-card span {
+  color: #f4f0e8;
+  font-size: 0.82rem;
+  font-weight: 900;
+}
+
+.visual-shape-preview {
+  width: 56px;
+  height: 56px;
+  background: hsl(var(--preview-hue) var(--preview-saturation) var(--preview-brightness));
+  box-shadow: 0 0 24px hsl(var(--preview-hue) var(--preview-saturation) 58% / 0.42);
+}
+
+.visual-shape-preview.wash {
+  border-radius: 8px;
+}
+
+.visual-shape-preview.ring {
+  border: 9px solid hsl(var(--preview-hue) var(--preview-saturation) var(--preview-brightness));
+  border-radius: 999px;
+  background: transparent;
+}
+
+.visual-shape-preview.bar {
+  width: 18px;
+  border-radius: 999px;
+}
+
+.visual-shape-preview.pulse {
+  border-radius: 999px;
+}
+
+.visual-shape-preview.spark {
+  clip-path: polygon(50% 0, 61% 35%, 98% 35%, 68% 56%, 80% 92%, 50% 70%, 20% 92%, 32% 56%, 2% 35%, 39% 35%);
 }
 
 .modulator-section {

@@ -1,5 +1,6 @@
 import {
   COMPOSITION_SCHEMA_VERSION,
+  LEGACY_COMPOSITION_SCHEMA_VERSION,
   type Composition,
   type StepEvent,
 } from "./types";
@@ -30,9 +31,9 @@ export function validateComposition(input: unknown): CompositionValidationResult
     };
   }
 
-  expectLiteral(
+  expectOneOf(
     input.schemaVersion,
-    COMPOSITION_SCHEMA_VERSION,
+    [LEGACY_COMPOSITION_SCHEMA_VERSION, COMPOSITION_SCHEMA_VERSION],
     "$.schemaVersion",
     "composition.schemaVersion",
     issues,
@@ -150,6 +151,14 @@ function validateAssets(assets: unknown[], issues: ValidationIssue[]): void {
 
     if (asset.durationMs !== undefined) {
       expectPositiveNumber(asset.durationMs, `${path}.durationMs`, "asset.durationMs", issues);
+    }
+
+    if (asset.sizeBytes !== undefined) {
+      expectNonNegativeInteger(asset.sizeBytes, `${path}.sizeBytes`, "asset.sizeBytes", issues);
+    }
+
+    if (asset.sha256 !== undefined && (typeof asset.sha256 !== "string" || !/^[a-f0-9]{64}$/i.test(asset.sha256))) {
+      addIssue(issues, `${path}.sha256`, "asset.sha256", "Expected a SHA-256 hex digest.");
     }
   });
 }

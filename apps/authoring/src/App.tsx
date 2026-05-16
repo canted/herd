@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode, type RefObject } from "react";
-import JSZip from "jszip";
 import {
   AlertTriangle,
   Boxes,
@@ -8,7 +7,8 @@ import {
   Download,
   FileInput,
   Layers,
-  Lock,
+  Pause,
+  Play,
   Plus,
   Radio,
   Save,
@@ -28,7 +28,12 @@ import type {
   StepEvent,
 } from "@herd/composition";
 import { validateComposition } from "@herd/composition";
-import { buildCompositionTimeline } from "@herd/runtime";
+import {
+  applyParameterLocks,
+  buildCompositionTimeline,
+  buildRuntimeTimeline,
+  playPolySh101Event,
+} from "@herd/runtime";
 import {
   clampStepCount,
   clearModulationRoute,
@@ -59,8 +64,32 @@ import {
 
 const storageKey = "herd.authoring.compositions.v1";
 const creatorEmailStorageKey = "herd.authoring.creatorEmail.v1";
-const serverBase = import.meta.env.VITE_SERVER_URL ?? "http://localhost:8787";
-const hostBase = import.meta.env.VITE_HOST_URL ?? "http://localhost:5173";
+const runsOnAuthoringDevServer = isLocalDevPort("5175");
+const serverBase = runsOnAuthoringDevServer
+  ? import.meta.env.VITE_SERVER_URL ?? "http://localhost:8787"
+  : window.location.origin;
+const hostBase = runsOnAuthoringDevServer
+  ? import.meta.env.VITE_HOST_URL ?? "http://localhost:5173"
+  : `${window.location.origin}/host`;
+
+interface WebKitAudioWindow extends Window {
+  webkitAudioContext?: typeof AudioContext;
+}
+
+function isLocalDevPort(port: string): boolean {
+  return (
+    window.location.port === port &&
+    ["localhost", "127.0.0.1", "0.0.0.0", "::1", "[::1]"].includes(window.location.hostname)
+  );
+}
+
+function createAudioContext(): AudioContext {
+  const AudioContextConstructor = window.AudioContext ?? (window as WebKitAudioWindow).webkitAudioContext;
+  if (AudioContextConstructor === undefined) {
+    throw new Error("Web Audio is unavailable in this browser.");
+  }
+  return new AudioContextConstructor();
+}
 
 const boundaries: Boundary[] = [
   "immediate",
@@ -88,6 +117,9 @@ interface ModulationCapture {
   modulator: number;
 }
 
+type StepToggleMode = "both" | "instrument" | "visualizer";
+type PreviewMode = "pattern" | "program";
+
 interface EmbeddedAssetPayload {
   dataUrl: string;
   mimeType: string;
@@ -98,6 +130,11 @@ interface EmbeddedAssetPayload {
 interface ImportedAsset {
   asset: AssetReference;
   embeddedPayload?: EmbeddedAssetPayload;
+}
+
+interface AuthUser {
+  id: string;
+  email: string;
 }
 
 const defaultModulators: Record<DeviceScope, ModulatorDraft[]> = {
@@ -132,14 +169,25 @@ export function App() {
   const [importError, setImportError] = useState<string | null>(null);
   const [launchError, setLaunchError] = useState<string | null>(null);
   const [creatorEmail, setCreatorEmail] = useState(() => localStorage.getItem(creatorEmailStorageKey) ?? "");
+  const [authUser, setAuthUser] = useState<AuthUser | null>(null);
+  const [authStatus, setAuthStatus] = useState<string | null>(null);
   const [serverStatus, setServerStatus] = useState<string | null>(null);
+  const [previewMode, setPreviewMode] = useState<PreviewMode | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const packageInputRef = useRef<HTMLInputElement | null>(null);
   const assetInputRef = useRef<HTMLInputElement | null>(null);
+  const previewAudioRef = useRef<AudioContext | null>(null);
+  const previewTimersRef = useRef<number[]>([]);
+  const compositionsRef = useRef(compositions);
+  const activeIdRef = useRef(activeId);
+  const selectedProgramIdRef = useRef(selectedProgramId);
+  const selectedVoiceIdRef = useRef(selectedVoiceId);
 
   const activeComposition = compositions.find((composition) => composition.id === activeId) ?? compositions[0];
-  const selectedProgram = activeComposition === undefined ? undefined : getProgram(activeComposition, selectedProgramId);
-  const selectedVoice = selectedProgram === undefined ? undefined : getVoice(selectedProgram, selectedVoiceId);
+  const selectedProgram = activeComposition?.programs.find((program) => program.id === selectedProgramId)
+    ?? activeComposition?.programs[0];
+  const selectedVoice = selectedProgram?.voices.find((voice) => voice.id === selectedVoiceId)
+    ?? selectedProgram?.voices[0];
   const selectedEvent = selectedVoice === undefined ? undefined : findStepEvent(selectedVoice, selectedStep);
   const validation = activeComposition === undefined
     ? { errors: ["No Composition open."], warnings: [] }
@@ -151,8 +199,21 @@ export function App() {
   }, [compositions]);
 
   useEffect(() => {
+    compositionsRef.current = compositions;
+    activeIdRef.current = activeId;
+    selectedProgramIdRef.current = selectedProgram?.id ?? selectedProgramId;
+    selectedVoiceIdRef.current = selectedVoice?.id ?? selectedVoiceId;
+  });
+
+  useEffect(() => {
     localStorage.setItem(creatorEmailStorageKey, creatorEmail);
   }, [creatorEmail]);
+
+  useEffect(() => {
+    void refreshAuthSession();
+  }, []);
+
+  useEffect(() => () => stopPreview(), []);
 
   useEffect(() => {
     if (activeComposition === undefined) return;
@@ -161,9 +222,19 @@ export function App() {
       if (fallbackProgram !== undefined) {
         setSelectedProgramId(fallbackProgram.id);
         setSelectedVoiceId(fallbackProgram.voices[0]?.id ?? "");
+      } else {
+        setSelectedProgramId("");
+        setSelectedVoiceId("");
       }
     }
   }, [activeComposition, selectedProgramId]);
+
+  useEffect(() => {
+    if (selectedProgram === undefined) return;
+    if (!selectedProgram.voices.some((voice) => voice.id === selectedVoiceId)) {
+      setSelectedVoiceId(selectedProgram.voices[0]?.id ?? "");
+    }
+  }, [selectedProgram, selectedVoiceId]);
 
   function updateActive(mutator: (composition: Composition) => void) {
     setCompositions((current) =>
@@ -180,8 +251,8 @@ export function App() {
     const composition = createBlankComposition();
     setCompositions((current) => [...current, composition]);
     setActiveId(composition.id);
-    setSelectedProgramId(composition.programSequencer.initialProgramId);
-    setSelectedVoiceId(composition.programs[0]?.voices[0]?.id ?? "");
+    setSelectedProgramId("");
+    setSelectedVoiceId("");
     setSelectedStep(0);
   }
 
@@ -221,6 +292,7 @@ export function App() {
   async function importPackage(file: File) {
     setImportError(null);
     try {
+      const { default: JSZip } = await import("jszip");
       const zip = await JSZip.loadAsync(file);
       const compositionFile = zip.file("composition.json");
 
@@ -290,6 +362,59 @@ export function App() {
     URL.revokeObjectURL(link.href);
   }
 
+  async function refreshAuthSession() {
+    const response = await fetch(`${serverBase}/api/auth/session`, {
+      credentials: "include",
+    });
+    if (!response.ok) {
+      setAuthUser(null);
+      return;
+    }
+
+    const payload = (await response.json()) as {
+      authenticated: boolean;
+      user: AuthUser | null;
+    };
+    setAuthUser(payload.authenticated ? payload.user : null);
+  }
+
+  async function requestMagicLink() {
+    setAuthStatus(null);
+    const response = await fetch(`${serverBase}/api/auth/magic-links`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      body: JSON.stringify({
+        email: creatorEmail,
+        returnTo: "/authoring",
+      }),
+    });
+
+    if (!response.ok) {
+      setAuthStatus(`Sign-in link failed: ${response.status}`);
+      return;
+    }
+
+    const payload = (await response.json()) as {
+      delivery: string;
+      devVerifyUrl?: string;
+    };
+    setAuthStatus(
+      payload.devVerifyUrl === undefined
+        ? "Magic link sent."
+        : `Dev magic link: ${payload.devVerifyUrl}`,
+    );
+  }
+
+  async function logout() {
+    await fetch(`${serverBase}/api/auth/logout`, {
+      method: "POST",
+      credentials: "include",
+    });
+    setAuthUser(null);
+    setAuthStatus("Signed out.");
+  }
+
   async function exportPackage() {
     if (activeComposition === undefined) return;
 
@@ -303,8 +428,8 @@ export function App() {
     const response = await fetch(`${serverBase}/api/creator/compositions`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
+      credentials: "include",
       body: JSON.stringify({
-        ownerEmail: creatorEmail,
         composition: activeComposition,
       }),
     });
@@ -326,8 +451,8 @@ export function App() {
     const response = await fetch(`${serverBase}/api/creator/packages`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
+      credentials: "include",
       body: JSON.stringify({
-        ownerEmail: creatorEmail,
         composition: activeComposition,
         filename,
         contentType: "application/zip",
@@ -340,6 +465,9 @@ export function App() {
     }
 
     const payload = (await response.json()) as {
+      package: {
+        id: string;
+      };
       upload: {
         configured: boolean;
         uploadUrl: string | null;
@@ -357,10 +485,27 @@ export function App() {
       body: blob,
     });
 
-    setServerStatus(uploadResponse.ok ? "Package uploaded." : `Upload failed: ${uploadResponse.status}`);
+    if (!uploadResponse.ok) {
+      setServerStatus(`Upload failed: ${uploadResponse.status}`);
+      return;
+    }
+
+    const confirmResponse = await fetch(`${serverBase}/api/creator/packages/${encodeURIComponent(payload.package.id)}/confirm`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      body: JSON.stringify({
+        contentType: "application/zip",
+        sizeBytes: blob.size,
+        sha256: await sha256Blob(blob),
+      }),
+    });
+
+    setServerStatus(confirmResponse.ok ? "Package uploaded and confirmed." : `Confirm failed: ${confirmResponse.status}`);
   }
 
   async function buildPackageBlob(composition: Composition): Promise<Blob> {
+    const { default: JSZip } = await import("jszip");
     const zip = new JSZip();
     const packaged = cloneComposition(composition);
     const embeddedAssets = readEmbeddedAssets(composition);
@@ -405,6 +550,9 @@ export function App() {
       const program = createProgram();
       composition.programs.push(program);
       composition.programSequencer.steps.push({ programId: program.id });
+      if (composition.programSequencer.initialProgramId.length === 0 || composition.programs.length === 1) {
+        composition.programSequencer.initialProgramId = program.id;
+      }
       setSelectedProgramId(program.id);
       setSelectedVoiceId(program.voices[0]?.id ?? "");
     });
@@ -428,15 +576,14 @@ export function App() {
 
   function deleteProgram(programId: string) {
     updateActive((composition) => {
-      if (composition.programs.length <= 1) return;
       composition.programs = composition.programs.filter((program) => program.id !== programId);
       composition.programSequencer.steps = composition.programSequencer.steps.filter((step) => step.programId !== programId);
-      if (composition.programSequencer.initialProgramId === programId) {
-        composition.programSequencer.initialProgramId = composition.programs[0]!.id;
+      const fallback = composition.programs[0];
+      if (composition.programSequencer.initialProgramId === programId || fallback === undefined) {
+        composition.programSequencer.initialProgramId = fallback?.id ?? "";
       }
-      const fallback = composition.programs[0]!;
-      setSelectedProgramId(fallback.id);
-      setSelectedVoiceId(fallback.voices[0]?.id ?? "");
+      setSelectedProgramId(fallback?.id ?? "");
+      setSelectedVoiceId(fallback?.voices[0]?.id ?? "");
     });
   }
 
@@ -472,7 +619,11 @@ export function App() {
     });
   }
 
-  function handleStepClick(step: number) {
+  function handleStepHover(step: number) {
+    setSelectedStep(step);
+  }
+
+  function handleStepClick(step: number, mode: StepToggleMode) {
     setSelectedStep(step);
     if (selectedProgram === undefined || selectedVoice === undefined) return;
 
@@ -480,14 +631,26 @@ export function App() {
       const voice = getVoice(getProgram(composition, selectedProgram.id), selectedVoice.id);
       const event = ensureStepEvent(voice, step);
 
-      if (layers.instrument) {
+      if (mode === "both") {
+        const hasAnyTrigger = event.instrumentTrigger?.enabled === true || event.visualizerTrigger?.enabled === true;
+        event.instrumentTrigger = {
+          enabled: !hasAnyTrigger,
+          durationMs: event.instrumentTrigger?.durationMs ?? 180,
+        };
+        event.visualizerTrigger = {
+          enabled: !hasAnyTrigger,
+          durationMs: event.visualizerTrigger?.durationMs ?? 240,
+        };
+      }
+
+      if (mode === "instrument") {
         event.instrumentTrigger = {
           enabled: !(event.instrumentTrigger?.enabled ?? false),
           durationMs: event.instrumentTrigger?.durationMs ?? 180,
         };
       }
 
-      if (layers.visualizer) {
+      if (mode === "visualizer") {
         event.visualizerTrigger = {
           enabled: !(event.visualizerTrigger?.enabled ?? false),
           durationMs: event.visualizerTrigger?.durationMs ?? 240,
@@ -520,23 +683,131 @@ export function App() {
         setStepEventLock(event, scope, path, value);
         setLockCapture(false);
       }
-
-      if (modulationCapture?.device === scope) {
-        const draft = modulators[scope][modulationCapture.modulator];
-        if (draft !== undefined) {
-          setModulationRoute(voice, {
-            device: scope,
-            modulator: modulationCapture.modulator + 1,
-            source: draft.source,
-            amount: draft.amount,
-            target: path,
-            enabled: true,
-            ...(typeof value === "number" ? { range: { min: 0, max: Math.max(1, value) } } : {}),
-          });
-        }
-        setModulationCapture(null);
-      }
     });
+  }
+
+  function toggleModulationCapture(scope: DeviceScope, modulator: number) {
+    setModulationCapture((current) =>
+      current?.device === scope && current.modulator === modulator ? null : { device: scope, modulator },
+    );
+  }
+
+  function captureModulationTarget(scope: DeviceScope, path: string, amount: number, range?: { min: number; max: number }) {
+    if (selectedProgram === undefined || selectedVoice === undefined || modulationCapture?.device !== scope) return;
+    const draft = modulators[scope][modulationCapture.modulator];
+    if (draft === undefined) return;
+
+    updateActive((composition) => {
+      const voice = getVoice(getProgram(composition, selectedProgram.id), selectedVoice.id);
+      setModulationRoute(voice, {
+        device: scope,
+        modulator: modulationCapture.modulator + 1,
+        source: draft.source,
+        amount,
+        target: path,
+        enabled: true,
+        ...(range === undefined ? {} : { range }),
+      });
+    });
+    setModulationCapture(null);
+  }
+
+  function playPreviewPattern() {
+    if (getPreviewSelectedVoice() === undefined) return;
+    stopPreview();
+    const context = createAudioContext();
+    previewAudioRef.current = context;
+    void context.resume();
+    setPreviewMode("pattern");
+    const previewState = {
+      nextStep: 0,
+      nextStepTime: context.currentTime + 0.06,
+    };
+    const scheduleTick = () => {
+      if (previewAudioRef.current !== context) return;
+      const voice = getPreviewSelectedVoice();
+      if (voice === undefined) {
+        stopPreview();
+        return;
+      }
+
+      const lookAheadSeconds = 0.12;
+      const minimumStart = context.currentTime + 0.03;
+      const stepCount = Math.max(1, voice.pattern.stepCount);
+      if (previewState.nextStep >= stepCount) {
+        previewState.nextStep = 0;
+      }
+      if (previewState.nextStepTime < minimumStart) {
+        previewState.nextStepTime = minimumStart;
+      }
+
+      while (previewState.nextStepTime <= context.currentTime + lookAheadSeconds) {
+        schedulePatternStep(context, voice, previewState.nextStep, previewState.nextStepTime);
+        previewState.nextStep = (previewState.nextStep + 1) % stepCount;
+        previewState.nextStepTime += getPatternStepMs(voice) / 1000;
+      }
+
+      const timer = window.setTimeout(scheduleTick, 25);
+      previewTimersRef.current = [timer];
+    };
+    scheduleTick();
+  }
+
+  function playPreviewProgram() {
+    const previewComposition = getPreviewComposition();
+    const previewProgramId = selectedProgramIdRef.current;
+    if (previewComposition === undefined || previewProgramId.length === 0) return;
+    stopPreview();
+    const context = createAudioContext();
+    previewAudioRef.current = context;
+    void context.resume();
+    setPreviewMode("program");
+
+    const events = buildRuntimeTimeline(previewComposition, {
+      programId: previewProgramId,
+    }).filter((event) => event.type === "instrument");
+    const now = context.currentTime + 0.08;
+    let lastEventMs = 0;
+
+    for (const event of events) {
+      lastEventMs = Math.max(lastEventMs, event.timeMs + (event.durationMs ?? 180));
+      if (event.instrumentType === "polySh101") {
+        playPolySh101Event(context, now + event.timeMs / 1000, event.parameters, event.durationMs);
+      }
+    }
+
+    const doneTimer = window.setTimeout(() => {
+      if (previewAudioRef.current === context) {
+        stopPreview();
+      }
+    }, Math.max(500, lastEventMs + 300));
+    previewTimersRef.current.push(doneTimer);
+  }
+
+  function stopPreview() {
+    for (const timer of previewTimersRef.current) {
+      window.clearTimeout(timer);
+    }
+    previewTimersRef.current = [];
+    const context = previewAudioRef.current;
+    previewAudioRef.current = null;
+    setPreviewMode(null);
+    if (context !== null && context.state !== "closed") {
+      void context.close();
+    }
+  }
+
+  function getPreviewComposition(): Composition | undefined {
+    return compositionsRef.current.find((composition) => composition.id === activeIdRef.current)
+      ?? compositionsRef.current[0];
+  }
+
+  function getPreviewSelectedVoice(): ProgramVoice | undefined {
+    const composition = getPreviewComposition();
+    const program = composition?.programs.find((candidate) => candidate.id === selectedProgramIdRef.current)
+      ?? composition?.programs[0];
+    return program?.voices.find((candidate) => candidate.id === selectedVoiceIdRef.current)
+      ?? program?.voices[0];
   }
 
   function patchModulationRoute(route: ModulationRoute, patch: Partial<ModulationRoute>) {
@@ -555,7 +826,7 @@ export function App() {
     });
   }
 
-  if (activeComposition === undefined || selectedProgram === undefined || selectedVoice === undefined) {
+  if (activeComposition === undefined) {
     return (
       <main className="empty-shell">
         <button className="primary-button" onClick={createComposition}>Create Composition</button>
@@ -643,7 +914,11 @@ export function App() {
 
         <ProgramSequencer
           composition={activeComposition}
-          selectedProgramId={selectedProgram.id}
+          selectedProgramId={selectedProgram?.id ?? selectedProgramId}
+          previewing={previewMode === "program"}
+          canPreview={selectedProgram !== undefined}
+          onPlayPreview={playPreviewProgram}
+          onStopPreview={stopPreview}
           onSelect={(programId) => {
             const program = getProgram(activeComposition, programId);
             setSelectedProgramId(programId);
@@ -660,29 +935,39 @@ export function App() {
 
         <section className="editor-grid">
           <div className="left-column">
-            <ProgramEditor
-              program={selectedProgram}
-              boundary={activeComposition.programSequencer.transitionPolicy.defaultBoundary}
-              onRename={(name) => updateActive((composition) => {
-                getProgram(composition, selectedProgram.id).name = name;
-              })}
-              onBoundary={(boundary) => updateActive((composition) => {
-                composition.programSequencer.transitionPolicy.defaultBoundary = boundary;
-              })}
-              onCompletion={(completion) => updateActive((composition) => {
-                getProgram(composition, selectedProgram.id).completion = completion;
-              })}
-            />
-            <VoiceSelector
-              program={selectedProgram}
-              selectedVoiceId={selectedVoice.id}
-              onSelect={setSelectedVoiceId}
-              onAdd={addVoice}
-              onDelete={deleteVoice}
-              onRename={(voiceId, name) => updateActive((composition) => {
-                getVoice(getProgram(composition, selectedProgram.id), voiceId).name = name;
-              })}
-            />
+            {selectedProgram === undefined ? (
+              <section className="panel empty-program-panel">
+                <h2>No Program</h2>
+                <p className="muted">Create a Program when you are ready to add Voices, patterns, and devices.</p>
+                <button className="primary-button" onClick={addProgram}><Plus size={14} />Add Program</button>
+              </section>
+            ) : (
+              <>
+                <ProgramEditor
+                  program={selectedProgram}
+                  boundary={activeComposition.programSequencer.transitionPolicy.defaultBoundary}
+                  onRename={(name) => updateActive((composition) => {
+                    getProgram(composition, selectedProgram.id).name = name;
+                  })}
+                  onBoundary={(boundary) => updateActive((composition) => {
+                    composition.programSequencer.transitionPolicy.defaultBoundary = boundary;
+                  })}
+                  onCompletion={(completion) => updateActive((composition) => {
+                    getProgram(composition, selectedProgram.id).completion = completion;
+                  })}
+                />
+                <VoiceSelector
+                  program={selectedProgram}
+                  selectedVoiceId={selectedVoice?.id ?? selectedVoiceId}
+                  onSelect={setSelectedVoiceId}
+                  onAdd={addVoice}
+                  onDelete={deleteVoice}
+                  onRename={(voiceId, name) => updateActive((composition) => {
+                    getVoice(getProgram(composition, selectedProgram.id), voiceId).name = name;
+                  })}
+                />
+              </>
+            )}
             <ValidationPanel validation={validation} />
             <AssetManager
               assets={activeComposition.assets}
@@ -695,66 +980,84 @@ export function App() {
             />
             <CreatorPersistencePanel
               creatorEmail={creatorEmail}
+              authUser={authUser}
+              authStatus={authStatus}
               status={serverStatus}
               onCreatorEmail={setCreatorEmail}
+              onMagicLink={() => void requestMagicLink()}
+              onRefreshSession={() => void refreshAuthSession()}
+              onLogout={() => void logout()}
               onSave={() => void saveActiveToServer()}
               onPackage={() => void uploadPackageToServer()}
             />
           </div>
 
           <div className="device-stack">
-            <PatternEditor
-              voice={selectedVoice}
-              selectedStep={selectedStep}
-              layers={layers}
-              selectedEvent={selectedEvent}
-              onLayers={setLayers}
-              onStep={handleStepClick}
-              onPatternChange={(mutator) => updateActive((composition) => {
-                mutator(getVoice(getProgram(composition, selectedProgram.id), selectedVoice.id));
-              })}
-              onEventChange={updateSelectedEvent}
-              onArmLock={() => setLockCapture(true)}
-              lockCapture={lockCapture}
-            />
-            <InstrumentEditor
-              voice={selectedVoice}
-              selectedEvent={selectedEvent}
-              lockCapture={lockCapture}
-              modulationCapture={modulationCapture}
-              modulators={modulators.instrument}
-              onModulators={(drafts) => setModulators((current) => ({ ...current, instrument: drafts }))}
-              onArmModulation={(modulator) => setModulationCapture({ device: "instrument", modulator })}
-              onParameter={(path, value) => updateDeviceParameter("instrument", path, value)}
-              onRoutePatch={patchModulationRoute}
-              onRouteDelete={removeModulationRoute}
-              assets={activeComposition.assets}
-              onInstrumentType={(type) => updateActive((composition) => {
-                getVoice(getProgram(composition, selectedProgram.id), selectedVoice.id).instrument.type = type;
-              })}
-              onSamplerZones={(zones) => updateActive((composition) => {
-                getVoice(getProgram(composition, selectedProgram.id), selectedVoice.id).instrument.defaults.zones = zones as unknown as ParameterValue;
-              })}
-            />
-            <VisualizerEditor
-              voice={selectedVoice}
-              selectedEvent={selectedEvent}
-              lockCapture={lockCapture}
-              modulationCapture={modulationCapture}
-              modulators={modulators.visualizer}
-              onModulators={(drafts) => setModulators((current) => ({ ...current, visualizer: drafts }))}
-              onArmModulation={(modulator) => setModulationCapture({ device: "visualizer", modulator })}
-              onParameter={(path, value) => updateDeviceParameter("visualizer", path, value)}
-              onRoutePatch={patchModulationRoute}
-              onRouteDelete={removeModulationRoute}
-            />
-            <UIDeviceEditor
-              voice={selectedVoice}
-              programs={activeComposition.programs}
-              onChange={(mutator) => updateActive((composition) => {
-                mutator(getVoice(getProgram(composition, selectedProgram.id), selectedVoice.id));
-              })}
-            />
+            {selectedProgram === undefined || selectedVoice === undefined ? (
+              <section className="device-panel empty-program-panel">
+                <DeviceHeader title="No Voice Selected" subtitle="Create a Program to begin authoring." />
+              </section>
+            ) : (
+              <>
+                <PatternEditor
+                  voice={selectedVoice}
+                  selectedStep={selectedStep}
+                  layers={layers}
+                  selectedEvent={selectedEvent}
+                  onLayers={setLayers}
+                  onStepHover={handleStepHover}
+                  onStepToggle={handleStepClick}
+                  onPatternChange={(mutator) => updateActive((composition) => {
+                    mutator(getVoice(getProgram(composition, selectedProgram.id), selectedVoice.id));
+                  })}
+                  onEventChange={updateSelectedEvent}
+                  lockCapture={lockCapture}
+                  previewPlaying={previewMode === "pattern"}
+                  onPlayPreview={playPreviewPattern}
+                  onStopPreview={stopPreview}
+                />
+                <InstrumentEditor
+                  voice={selectedVoice}
+                  selectedEvent={selectedEvent}
+                  lockCapture={lockCapture}
+                  modulationCapture={modulationCapture}
+                  modulators={modulators.instrument}
+                  onModulators={(drafts) => setModulators((current) => ({ ...current, instrument: drafts }))}
+                  onArmModulation={(modulator) => toggleModulationCapture("instrument", modulator)}
+                  onModulationTarget={(path, amount, range) => captureModulationTarget("instrument", path, amount, range)}
+                  onParameter={(path, value) => updateDeviceParameter("instrument", path, value)}
+                  onRoutePatch={patchModulationRoute}
+                  onRouteDelete={removeModulationRoute}
+                  assets={activeComposition.assets}
+                  onInstrumentType={(type) => updateActive((composition) => {
+                    getVoice(getProgram(composition, selectedProgram.id), selectedVoice.id).instrument.type = type;
+                  })}
+                  onSamplerZones={(zones) => updateActive((composition) => {
+                    getVoice(getProgram(composition, selectedProgram.id), selectedVoice.id).instrument.defaults.zones = zones as unknown as ParameterValue;
+                  })}
+                />
+                <VisualizerEditor
+                  voice={selectedVoice}
+                  selectedEvent={selectedEvent}
+                  lockCapture={lockCapture}
+                  modulationCapture={modulationCapture}
+                  modulators={modulators.visualizer}
+                  onModulators={(drafts) => setModulators((current) => ({ ...current, visualizer: drafts }))}
+                  onArmModulation={(modulator) => toggleModulationCapture("visualizer", modulator)}
+                  onModulationTarget={(path, amount, range) => captureModulationTarget("visualizer", path, amount, range)}
+                  onParameter={(path, value) => updateDeviceParameter("visualizer", path, value)}
+                  onRoutePatch={patchModulationRoute}
+                  onRouteDelete={removeModulationRoute}
+                />
+                <UIDeviceEditor
+                  voice={selectedVoice}
+                  programs={activeComposition.programs}
+                  onChange={(mutator) => updateActive((composition) => {
+                    mutator(getVoice(getProgram(composition, selectedProgram.id), selectedVoice.id));
+                  })}
+                />
+              </>
+            )}
           </div>
 
           <aside className="preview-panel">
@@ -770,7 +1073,7 @@ export function App() {
             </div>
             <h3>Modulation Routes</h3>
             <div className="timeline-list">
-              {getModulationRoutes(selectedVoice).length === 0 ? (
+              {selectedVoice === undefined || getModulationRoutes(selectedVoice).length === 0 ? (
                 <p className="muted">No modulation routes captured.</p>
               ) : (
                 getModulationRoutes(selectedVoice).map((route) => (
@@ -791,6 +1094,10 @@ export function App() {
 function ProgramSequencer({
   composition,
   selectedProgramId,
+  previewing,
+  canPreview,
+  onPlayPreview,
+  onStopPreview,
   onSelect,
   onAdd,
   onDuplicate,
@@ -800,6 +1107,10 @@ function ProgramSequencer({
 }: {
   composition: Composition;
   selectedProgramId: string;
+  previewing: boolean;
+  canPreview: boolean;
+  onPlayPreview: () => void;
+  onStopPreview: () => void;
   onSelect: (programId: string) => void;
   onAdd: () => void;
   onDuplicate: (programId: string) => void;
@@ -810,10 +1121,26 @@ function ProgramSequencer({
   return (
     <section className="sequencer-bar" aria-label="Program Sequencer">
       <div className="section-title">
-        <Layers aria-hidden="true" />
-        <h2>Program Sequencer</h2>
+        <div className="section-title-copy">
+          <Layers aria-hidden="true" />
+          <h2>Program Sequencer</h2>
+        </div>
+        <button
+          className={previewing ? "armed-button" : "primary-button"}
+          disabled={!canPreview}
+          onClick={previewing ? onStopPreview : onPlayPreview}
+        >
+          {previewing ? <Pause size={14} /> : <Play size={14} />}
+          {previewing ? "Stop" : "Play"}
+        </button>
       </div>
       <div className="program-steps">
+        {composition.programSequencer.steps.length === 0 && (
+          <div className="program-empty-card">
+            <strong>No Programs yet</strong>
+            <span>New Compositions start empty.</span>
+          </div>
+        )}
         {composition.programSequencer.steps.map((step, index) => {
           const program = getProgram(composition, step.programId);
           const selected = program.id === selectedProgramId;
@@ -829,8 +1156,8 @@ function ProgramSequencer({
                 <button onClick={() => onMove(program.id, -1)} aria-label="Move Program earlier">↑</button>
                 <button onClick={() => onMove(program.id, 1)} aria-label="Move Program later">↓</button>
                 <button onClick={() => onSetInitial(program.id)}>Initial</button>
-                <button onClick={() => onDuplicate(program.id)}><Copy size={13} /></button>
-                <button onClick={() => onDelete(program.id)}><Trash2 size={13} /></button>
+                <button onClick={() => onDuplicate(program.id)} aria-label={`Duplicate ${program.name}`}><Copy size={13} /></button>
+                <button onClick={() => onDelete(program.id)} aria-label={`Delete ${program.name}`}><Trash2 size={13} /></button>
               </div>
             </div>
           );
@@ -957,37 +1284,50 @@ function PatternEditor({
   layers,
   selectedEvent,
   onLayers,
-  onStep,
+  onStepHover,
+  onStepToggle,
   onPatternChange,
   onEventChange,
-  onArmLock,
   lockCapture,
+  previewPlaying,
+  onPlayPreview,
+  onStopPreview,
 }: {
   voice: ProgramVoice;
   selectedStep: number;
   layers: LayersState;
   selectedEvent: StepEvent | undefined;
   onLayers: (layers: LayersState) => void;
-  onStep: (step: number) => void;
+  onStepHover: (step: number) => void;
+  onStepToggle: (step: number, mode: StepToggleMode) => void;
   onPatternChange: (mutator: (voice: ProgramVoice) => void) => void;
   onEventChange: (mutator: (event: StepEvent, voice: ProgramVoice) => void) => void;
-  onArmLock: () => void;
   lockCapture: boolean;
+  previewPlaying: boolean;
+  onPlayPreview: () => void;
+  onStopPreview: () => void;
 }) {
   const steps = Array.from({ length: voice.pattern.stepCount }, (_, index) => index);
+  const selectedLocks = getStepLocks(selectedEvent);
   return (
     <section className="device-panel pattern-device">
-      <DeviceHeader title="Pattern" subtitle="Step Sequencer" />
+      <div className="device-header">
+        <div>
+          <h2>Pattern</h2>
+          <p>Step Sequencer</p>
+        </div>
+        <button className={previewPlaying ? "armed-button" : "primary-button"} onClick={previewPlaying ? onStopPreview : onPlayPreview}>
+          {previewPlaying ? <Pause size={14} /> : <Play size={14} />}
+          {previewPlaying ? "Stop" : "Play"}
+        </button>
+      </div>
       <div className="pattern-controls">
         <NumberField label="Steps" min={1} max={64} value={voice.pattern.stepCount} onChange={(value) => onPatternChange((draft) => {
           draft.pattern.stepCount = clampStepCount(value);
           draft.pattern.stepEvents = draft.pattern.stepEvents.filter((event) => event.step < draft.pattern.stepCount);
         })} />
-        <NumberField label="Tempo" min={20} max={240} value={voice.pattern.tempoBpm} onChange={(value) => onPatternChange((draft) => {
-          draft.pattern.tempoBpm = value;
-        })} />
-        <NumberField label="Repeats" min={1} max={64} value={voice.pattern.repetitions ?? 1} onChange={(value) => onPatternChange((draft) => {
-          draft.pattern.repetitions = Math.max(1, Math.round(value));
+        <RangeField label="Tempo" min={20} max={240} step={1} value={voice.pattern.tempoBpm} suffix=" BPM" onChange={(value) => onPatternChange((draft) => {
+          draft.pattern.tempoBpm = Math.round(value);
         })} />
       </div>
       <div className="layer-toggles">
@@ -1011,11 +1351,24 @@ function PatternEditor({
                 hasVisualizer ? "has-visualizer" : "",
                 hasLocks ? "has-locks" : "",
               ].join(" ")}
-              onClick={() => onStep(step)}
-              aria-label={`Step ${step + 1}`}
+              onMouseEnter={() => onStepHover(step)}
+              onFocus={() => onStepHover(step)}
+              onClick={(event) => {
+                const mode: StepToggleMode = event.metaKey
+                  ? "instrument"
+                  : event.altKey
+                    ? "visualizer"
+                    : "both";
+                onStepToggle(step, mode);
+              }}
+              aria-label={`Step ${step + 1}: click toggles both triggers, Command-click toggles instrument, Option-click toggles visualizer`}
             >
               <span>{step + 1}</span>
-              <small>{hasInstrument ? "I" : ""}{hasVisualizer ? "V" : ""}{hasLocks ? "L" : ""}</small>
+              <small aria-hidden="true">
+                <i className={hasInstrument ? "active" : ""} />
+                <i className={hasVisualizer ? "active" : ""} />
+                <i className={hasLocks ? "active" : ""} />
+              </small>
             </button>
           );
         })}
@@ -1025,8 +1378,11 @@ function PatternEditor({
           <h3>Selected Step {selectedStep + 1}</h3>
           <p>{selectedEvent === undefined ? "No Step Event yet." : "Edit triggers and locks for this Step Event."}</p>
         </div>
-        <button className={lockCapture ? "armed-button" : ""} onClick={onArmLock}><Lock size={14} />Create lock</button>
       </div>
+      <StepNoteEditor
+        selectedEvent={selectedEvent}
+        onEventChange={onEventChange}
+      />
       <div className="trigger-grid">
         <Toggle
           label="Instrument Trigger"
@@ -1044,7 +1400,7 @@ function PatternEditor({
         />
       </div>
       <div className="lock-list">
-        {getStepLocks(selectedEvent).length === 0 ? <p className="muted">No locks on this step.</p> : getStepLocks(selectedEvent).map((lock) => (
+        {selectedLocks.length === 0 ? <p className="muted">No locks on this step.</p> : selectedLocks.map((lock) => (
           <div key={`${lock.scope}:${lock.path}`} className="lock-row">
             <span>{lock.scope}.{lock.path}</span>
             <strong>{String(lock.value)}</strong>
@@ -1053,6 +1409,73 @@ function PatternEditor({
         ))}
       </div>
     </section>
+  );
+}
+
+function StepNoteEditor({
+  selectedEvent,
+  onEventChange,
+}: {
+  selectedEvent: StepEvent | undefined;
+  onEventChange: (mutator: (event: StepEvent, voice: ProgramVoice) => void) => void;
+}) {
+  const activePitches = getLockedPitchSet(selectedEvent);
+  const velocity = Number(getNestedParameter(selectedEvent?.parameterLocks?.instrument ?? {}, "velocity") ?? 84);
+  const durationMs = selectedEvent?.instrumentTrigger?.durationMs ?? 180;
+
+  function togglePitch(pitch: string) {
+    onEventChange((event) => {
+      const next = new Set(getLockedPitchSet(event));
+      if (next.has(pitch)) {
+        next.delete(pitch);
+      } else {
+        next.add(pitch);
+      }
+      const pitches = [...next].sort((a, b) => pitchToMidiNumber(a) - pitchToMidiNumber(b));
+      if (pitches.length === 0) {
+        clearStepEventLock(event, "instrument", "pitches");
+      } else {
+        setStepEventLock(event, "instrument", "pitches", pitches);
+      }
+    });
+  }
+
+  return (
+    <div className="step-note-editor">
+      <div className="pitch-grid" aria-label="Selected step pitch locks">
+        {pitchGridNotes.map((pitch) => {
+          const active = activePitches.has(pitch);
+          const noteName = pitch.replace(/-?\d+$/, "");
+          return (
+            <button
+              key={pitch}
+              className={[
+                "pitch-cell",
+                blackNoteNames.has(noteName) ? "black-key" : "white-key",
+                active ? "active" : "",
+              ].join(" ")}
+              onClick={() => togglePitch(pitch)}
+              aria-pressed={active}
+              aria-label={`${pitch} ${active ? "active" : "inactive"}`}
+            >
+              <span aria-hidden="true" />
+              <i aria-hidden="true" />
+            </button>
+          );
+        })}
+      </div>
+      <div className="step-note-sliders">
+        <RangeField label="Velocity" min={1} max={127} step={1} value={velocity} onChange={(value) => onEventChange((event) => {
+          setStepEventLock(event, "instrument", "velocity", Math.round(value));
+        })} />
+        <RangeField label="Duration" min={20} max={2000} step={10} value={durationMs} suffix=" ms" onChange={(value) => onEventChange((event) => {
+          event.instrumentTrigger = {
+            enabled: event.instrumentTrigger?.enabled ?? true,
+            durationMs: Math.round(value),
+          };
+        })} />
+      </div>
+    </div>
   );
 }
 
@@ -1069,6 +1492,83 @@ interface SamplerZone {
   endMs: number;
   loop: boolean;
 }
+
+const sh101Waveforms = [
+  { value: "triangle", label: "Triangle" },
+  { value: "square", label: "Square" },
+  { value: "random", label: "Random" },
+  { value: "noise", label: "Noise" },
+];
+
+const sh101Ranges = [
+  { value: "16", label: "16'" },
+  { value: "8", label: "8'" },
+  { value: "4", label: "4'" },
+  { value: "2", label: "2'" },
+];
+
+const pulseWidthSources = [
+  { value: "lfo", label: "LFO" },
+  { value: "manual", label: "Manual" },
+  { value: "envelope", label: "ENV" },
+];
+
+const subOscModes = [
+  { value: "oneOctSquare", label: "1 Oct Square" },
+  { value: "twoOctSquare", label: "2 Oct Square" },
+  { value: "twoOctPulse", label: "2 Oct Pulse" },
+];
+
+const vcaModes = [
+  { value: "envelope", label: "ENV" },
+  { value: "gate", label: "Gate" },
+];
+
+const envelopeGateModes = [
+  { value: "gateTrigger", label: "Gate + Trig" },
+  { value: "gate", label: "Gate" },
+  { value: "lfo", label: "LFO" },
+];
+
+const portamentoModes = [
+  { value: "auto", label: "Auto" },
+  { value: "off", label: "Off" },
+  { value: "on", label: "On" },
+];
+
+const transposeModes = [
+  { value: "low", label: "L" },
+  { value: "middle", label: "M" },
+  { value: "high", label: "H" },
+];
+
+const pitchGridNotes = Array.from({ length: 72 }, (_, index) => midiToPitch(24 + index));
+const blackNoteNames = new Set(["C#", "D#", "F#", "G#", "A#"]);
+
+const visualizerShapes = [
+  { value: "wash", label: "Wash" },
+  { value: "ring", label: "Ring" },
+  { value: "bar", label: "Bar" },
+  { value: "pulse", label: "Pulse" },
+  { value: "spark", label: "Spark" },
+];
+
+const visualizerPlacements = [
+  { value: "center", label: "Center" },
+  { value: "left", label: "Left" },
+  { value: "right", label: "Right" },
+  { value: "top", label: "Top" },
+  { value: "bottom", label: "Bottom" },
+  { value: "full", label: "Full" },
+];
+
+const visualizerMotions = [
+  { value: "pulse", label: "Pulse" },
+  { value: "drift", label: "Drift" },
+  { value: "strobe", label: "Strobe" },
+  { value: "bloom", label: "Bloom" },
+  { value: "still", label: "Still" },
+];
 
 function InstrumentEditor(props: DeviceEditorProps & {
   assets: AssetReference[];
@@ -1098,26 +1598,63 @@ function InstrumentEditor(props: DeviceEditorProps & {
           onChange={onSamplerZones}
         />
       ) : (
-        <>
-          <TextControl label="Pitch" path="pitch" target={voice.instrument.defaults} scope="instrument" {...props} />
-          <NumberControl label="Velocity" path="velocity" min={1} max={127} target={voice.instrument.defaults} scope="instrument" {...props} />
-          <NumberControl label="Saw" path="oscillator.saw" min={0} max={1} target={voice.instrument.defaults} scope="instrument" boolean {...props} />
-          <NumberControl label="Pulse" path="oscillator.pulse" min={0} max={1} target={voice.instrument.defaults} scope="instrument" boolean {...props} />
-          <NumberControl label="Sub" path="oscillator.sub" min={0} max={1} target={voice.instrument.defaults} scope="instrument" boolean {...props} />
-          <SliderControl label="Noise" path="oscillator.noise" target={voice.instrument.defaults} scope="instrument" {...props} />
-          <SliderControl label="Pulse Width" path="oscillator.pulseWidth" target={voice.instrument.defaults} scope="instrument" {...props} />
-          <SliderControl label="Filter Cutoff" path="filter.cutoff" target={voice.instrument.defaults} scope="instrument" {...props} />
-          <SliderControl label="Resonance" path="filter.resonance" target={voice.instrument.defaults} scope="instrument" {...props} />
-          <SliderControl label="Filter Env" path="filter.envelopeAmount" target={voice.instrument.defaults} scope="instrument" {...props} />
-          <SliderControl label="LFO Rate" path="lfo.rate" target={voice.instrument.defaults} scope="instrument" {...props} />
-          <SliderControl label="LFO Amount" path="lfo.amount" target={voice.instrument.defaults} scope="instrument" {...props} />
-          <NumberControl label="Attack" path="envelope.attackMs" min={0} max={2000} target={voice.instrument.defaults} scope="instrument" {...props} />
-          <NumberControl label="Decay" path="envelope.decayMs" min={1} max={5000} target={voice.instrument.defaults} scope="instrument" {...props} />
-          <SliderControl label="Sustain" path="envelope.sustain" target={voice.instrument.defaults} scope="instrument" {...props} />
-          <NumberControl label="Release" path="envelope.releaseMs" min={1} max={5000} target={voice.instrument.defaults} scope="instrument" {...props} />
-        </>
+        <div className="sh101-panel">
+          <SynthBlock title="Tune">
+            <VerticalSliderControl label="Tune" path="tune" min={-12} max={12} step={1} target={voice.instrument.defaults} scope="instrument" {...props} />
+          </SynthBlock>
+          <SynthBlock title="Modulator">
+            <VerticalSliderControl label="LFO/CLK Rate" path="lfo.rate" target={voice.instrument.defaults} scope="instrument" {...props} />
+            <SelectControl label="Wave Form" path="lfo.waveform" options={sh101Waveforms} target={voice.instrument.defaults} scope="instrument" {...props} />
+          </SynthBlock>
+          <SynthBlock title="VCO">
+            <VerticalSliderControl label="MOD" path="oscillator.modulationAmount" target={voice.instrument.defaults} scope="instrument" {...props} />
+            <SelectControl label="Range" path="oscillator.range" options={sh101Ranges} target={voice.instrument.defaults} scope="instrument" {...props} />
+            <VerticalSliderControl label="Pulse Width" path="oscillator.pulseWidth" target={voice.instrument.defaults} scope="instrument" {...props} />
+            <SelectControl label="PW Source" path="oscillator.pulseWidthSource" options={pulseWidthSources} target={voice.instrument.defaults} scope="instrument" {...props} />
+          </SynthBlock>
+          <SynthBlock title="Source Mixer">
+            <VerticalSliderControl label="Pulse" path="oscillator.pulseLevel" target={voice.instrument.defaults} scope="instrument" {...props} />
+            <VerticalSliderControl label="Saw" path="oscillator.sawLevel" target={voice.instrument.defaults} scope="instrument" {...props} />
+            <VerticalSliderControl label="Sub Osc" path="oscillator.subLevel" target={voice.instrument.defaults} scope="instrument" {...props} />
+            <SelectControl label="Sub Mode" path="oscillator.subMode" options={subOscModes} target={voice.instrument.defaults} scope="instrument" {...props} />
+            <VerticalSliderControl label="Noise" path="oscillator.noise" target={voice.instrument.defaults} scope="instrument" {...props} />
+          </SynthBlock>
+          <SynthBlock title="VCF">
+            <VerticalSliderControl label="Freq" path="filter.cutoff" target={voice.instrument.defaults} scope="instrument" {...props} />
+            <VerticalSliderControl label="Res" path="filter.resonance" target={voice.instrument.defaults} scope="instrument" {...props} />
+            <VerticalSliderControl label="Env" path="filter.envelopeAmount" target={voice.instrument.defaults} scope="instrument" {...props} />
+            <VerticalSliderControl label="Mod" path="filter.modulationAmount" target={voice.instrument.defaults} scope="instrument" {...props} />
+            <VerticalSliderControl label="Kybd" path="filter.keyboardTracking" target={voice.instrument.defaults} scope="instrument" {...props} />
+          </SynthBlock>
+          <SynthBlock title="VCA">
+            <SelectControl label="Mode" path="vca.mode" options={vcaModes} target={voice.instrument.defaults} scope="instrument" {...props} />
+          </SynthBlock>
+          <SynthBlock title="ENV">
+            <SelectControl label="Trig" path="envelope.gateMode" options={envelopeGateModes} target={voice.instrument.defaults} scope="instrument" {...props} />
+            <VerticalSliderControl label="A" path="envelope.attackMs" min={0} max={2000} step={5} suffix="ms" target={voice.instrument.defaults} scope="instrument" {...props} />
+            <VerticalSliderControl label="D" path="envelope.decayMs" min={1} max={5000} step={5} suffix="ms" target={voice.instrument.defaults} scope="instrument" {...props} />
+            <VerticalSliderControl label="S" path="envelope.sustain" target={voice.instrument.defaults} scope="instrument" {...props} />
+            <VerticalSliderControl label="R" path="envelope.releaseMs" min={1} max={5000} step={5} suffix="ms" target={voice.instrument.defaults} scope="instrument" {...props} />
+          </SynthBlock>
+          <SynthBlock title="Performance">
+            <TextControl label="Root" path="pitch" target={voice.instrument.defaults} scope="instrument" {...props} />
+            <VerticalSliderControl label="Volume" path="gain" target={voice.instrument.defaults} scope="instrument" {...props} />
+            <VerticalSliderControl label="Portamento" path="glide" target={voice.instrument.defaults} scope="instrument" {...props} />
+            <SelectControl label="Portamento" path="portamentoMode" options={portamentoModes} target={voice.instrument.defaults} scope="instrument" {...props} />
+            <SelectControl label="Transpose" path="transpose" options={transposeModes} target={voice.instrument.defaults} scope="instrument" {...props} />
+          </SynthBlock>
+        </div>
       )}
     </DevicePanel>
+  );
+}
+
+function SynthBlock({ title, children }: { title: string; children: ReactNode }) {
+  return (
+    <section className="synth-block">
+      <h3>{title}</h3>
+      <div className="synth-controls">{children}</div>
+    </section>
   );
 }
 
@@ -1199,16 +1736,29 @@ function SamplerZoneEditor({
 
 function VisualizerEditor(props: DeviceEditorProps) {
   const { voice } = props;
+  const hue = Number(getNestedParameter(voice.visualizer.defaults, "hue") ?? 0);
+  const saturation = Number(getNestedParameter(voice.visualizer.defaults, "saturation") ?? 0);
+  const brightness = Number(getNestedParameter(voice.visualizer.defaults, "brightness") ?? 0);
+  const shape = String(getNestedParameter(voice.visualizer.defaults, "shape") ?? "wash");
+  const previewStyle = {
+    "--preview-hue": `${hue}`,
+    "--preview-saturation": `${Math.round(saturation * 100)}%`,
+    "--preview-brightness": `${Math.round(brightness * 100)}%`,
+  } as CSSProperties;
   return (
     <DevicePanel title="Visualizer" subtitle="Color Wash and Cel Defaults" scope="visualizer" {...props}>
-      <NumberControl label="Hue" path="hue" min={0} max={360} target={voice.visualizer.defaults} scope="visualizer" {...props} />
+      <div className="visual-preview-card" style={previewStyle}>
+        <div className={`visual-shape-preview ${shape}`} aria-hidden="true" />
+        <span>{visualizerShapes.find((option) => option.value === shape)?.label ?? shape}</span>
+      </div>
+      <SliderControl label="Hue" path="hue" min={0} max={360} step={1} target={voice.visualizer.defaults} scope="visualizer" {...props} />
       <SliderControl label="Saturation" path="saturation" target={voice.visualizer.defaults} scope="visualizer" {...props} />
       <SliderControl label="Brightness" path="brightness" target={voice.visualizer.defaults} scope="visualizer" {...props} />
-      <TextControl label="Shape" path="shape" target={voice.visualizer.defaults} scope="visualizer" {...props} />
+      <SelectControl label="Shape" path="shape" options={visualizerShapes} target={voice.visualizer.defaults} scope="visualizer" {...props} />
       <SliderControl label="Intensity" path="intensity" target={voice.visualizer.defaults} scope="visualizer" {...props} />
-      <NumberControl label="Decay" path="decayMs" min={1} max={5000} target={voice.visualizer.defaults} scope="visualizer" {...props} />
-      <TextControl label="Placement" path="placement" target={voice.visualizer.defaults} scope="visualizer" {...props} />
-      <TextControl label="Motion" path="motion" target={voice.visualizer.defaults} scope="visualizer" {...props} />
+      <SliderControl label="Decay" path="decayMs" min={1} max={5000} step={5} suffix="ms" target={voice.visualizer.defaults} scope="visualizer" {...props} />
+      <SelectControl label="Placement" path="placement" options={visualizerPlacements} target={voice.visualizer.defaults} scope="visualizer" {...props} />
+      <SelectControl label="Motion" path="motion" options={visualizerMotions} target={voice.visualizer.defaults} scope="visualizer" {...props} />
     </DevicePanel>
   );
 }
@@ -1262,29 +1812,53 @@ function AssetManager({
 
 function CreatorPersistencePanel({
   creatorEmail,
+  authUser,
+  authStatus,
   status,
   onCreatorEmail,
+  onMagicLink,
+  onRefreshSession,
+  onLogout,
   onSave,
   onPackage,
 }: {
   creatorEmail: string;
+  authUser: AuthUser | null;
+  authStatus: string | null;
   status: string | null;
   onCreatorEmail: (email: string) => void;
+  onMagicLink: () => void;
+  onRefreshSession: () => void;
+  onLogout: () => void;
   onSave: () => void;
   onPackage: () => void;
 }) {
   return (
     <section className="panel creator-panel">
       <div className="panel-heading">
-        <h2>Server</h2>
+        <h2>Account</h2>
       </div>
-      <label>
-        Creator email
-        <input value={creatorEmail} onChange={(event) => onCreatorEmail(event.target.value)} />
-      </label>
+      {authUser === null ? (
+        <>
+          <label>
+            Email
+            <input value={creatorEmail} onChange={(event) => onCreatorEmail(event.target.value)} />
+          </label>
+          <div className="creator-actions">
+            <button onClick={onMagicLink}><Radio size={14} />Send magic link</button>
+            <button onClick={onRefreshSession}>Refresh session</button>
+          </div>
+        </>
+      ) : (
+        <>
+          <p className="server-status">Signed in as {authUser.email}</p>
+          <button onClick={onLogout}>Sign out</button>
+        </>
+      )}
+      {authStatus !== null && <p className="server-status">{authStatus}</p>}
       <div className="creator-actions">
-        <button onClick={onSave}><Save size={14} />Save</button>
-        <button onClick={onPackage}><Upload size={14} />Package</button>
+        <button onClick={onSave} disabled={authUser === null}><Save size={14} />Save</button>
+        <button onClick={onPackage} disabled={authUser === null}><Upload size={14} />Package</button>
       </div>
       {status !== null && <p className="server-status">{status}</p>}
     </section>
@@ -1299,6 +1873,7 @@ interface DeviceEditorProps {
   modulators: ModulatorDraft[];
   onModulators: (drafts: ModulatorDraft[]) => void;
   onArmModulation: (modulator: number) => void;
+  onModulationTarget: (path: string, amount: number, range?: { min: number; max: number }) => void;
   onParameter: (path: string, value: ParameterValue) => void;
   onRoutePatch: (route: ModulationRoute, patch: Partial<ModulationRoute>) => void;
   onRouteDelete: (route: ModulationRoute) => void;
@@ -1364,7 +1939,7 @@ function DevicePanel({
               className={modulationCapture?.device === scope && modulationCapture.modulator === index ? "armed-button" : ""}
               onClick={() => onArmModulation(index)}
             >
-              Target
+              {modulationCapture?.device === scope && modulationCapture.modulator === index ? "Cancel" : "Target"}
             </button>
           </div>
         ))}
@@ -1473,18 +2048,16 @@ function UIDeviceEditor({
   const ui = voice.ui;
   return (
     <section className="device-panel">
-      <DeviceHeader title="UI Device" subtitle="Voice-local Prompt" />
+      <DeviceHeader title="Audience Prompt" subtitle="Optional choice prompt shown during this Voice" />
       {ui === undefined ? (
         <button onClick={() => onChange((draft) => {
           const createdUi = createVoice().ui;
-          if (createdUi !== undefined) {
-            draft.ui = createdUi;
-          }
-        })}>Add UI Device</button>
+          draft.ui = createdUi ?? createChoicePromptDevice();
+        })}>Add Choice Prompt</button>
       ) : (
         <div className="ui-editor">
           <label>
-            Prompt
+            Display text
             <input value={ui.prompt.text} onChange={(event) => onChange((draft) => {
               if (draft.ui !== undefined) draft.ui.prompt.text = event.target.value;
             })} />
@@ -1515,7 +2088,7 @@ function UIDeviceEditor({
                   }
                   draft.ui.prompt.choices[index] = nextChoice;
                 })}>
-                  <option value="">No jump</option>
+                  <option value="">Stay in flow</option>
                   {programs.map((program) => <option key={program.id} value={program.id}>{program.name}</option>)}
                 </select>
                 <button onClick={() => onChange((draft) => {
@@ -1534,6 +2107,22 @@ function UIDeviceEditor({
       )}
     </section>
   );
+}
+
+function createChoicePromptDevice() {
+  return {
+    id: `ui-${Math.random().toString(36).slice(2, 8)}`,
+    type: "choicePrompt" as const,
+    prompt: {
+      id: `prompt-${Math.random().toString(36).slice(2, 8)}`,
+      text: "Choose",
+      applyBoundary: "patternLoopEnd" as Boundary,
+      choices: [
+        { id: `choice-${Math.random().toString(36).slice(2, 8)}`, label: "A" },
+        { id: `choice-${Math.random().toString(36).slice(2, 8)}`, label: "B" },
+      ],
+    },
+  };
 }
 
 function DeviceHeader({ title, subtitle }: { title: string; subtitle: string }) {
@@ -1555,15 +2144,64 @@ function SliderControl({
   selectedEvent,
   lockCapture,
   modulationCapture,
+  modulators,
   voice,
   onParameter,
-}: ControlProps) {
+  onModulationTarget,
+  min = 0,
+  max = 1,
+  step = 0.01,
+  suffix = "",
+}: ControlProps & { min?: number; max?: number; step?: number; suffix?: string }) {
   const value = Number(getNestedParameter(target, path) ?? 0);
   return (
     <label className={controlClass(scope, path, selectedEvent, lockCapture, modulationCapture, voice)}>
       <span>{label}</span>
-      <input type="range" min={0} max={1} step={0.01} value={value} onChange={(event) => onParameter(path, Number(event.target.value))} />
-      <strong>{value.toFixed(2)}</strong>
+      <input type="range" min={min} max={max} step={step} value={value} onChange={(event) => onParameter(path, Number(event.target.value))} />
+      <strong>{formatControlValue(value, suffix)}</strong>
+      <ModTargetOverlay
+        scope={scope}
+        path={path}
+        range={{ min, max }}
+        modulationCapture={modulationCapture}
+        modulators={modulators}
+        onModulationTarget={onModulationTarget}
+      />
+    </label>
+  );
+}
+
+function VerticalSliderControl({
+  label,
+  path,
+  target,
+  scope,
+  selectedEvent,
+  lockCapture,
+  modulationCapture,
+  modulators,
+  voice,
+  onParameter,
+  onModulationTarget,
+  min = 0,
+  max = 1,
+  step = 0.01,
+  suffix = "",
+}: ControlProps & { min?: number; max?: number; step?: number; suffix?: string }) {
+  const value = Number(getNestedParameter(target, path) ?? 0);
+  return (
+    <label className={`${controlClass(scope, path, selectedEvent, lockCapture, modulationCapture, voice)} vertical-control`}>
+      <span>{label}</span>
+      <input type="range" min={min} max={max} step={step} value={value} onChange={(event) => onParameter(path, Number(event.target.value))} />
+      <strong>{formatControlValue(value, suffix)}</strong>
+      <ModTargetOverlay
+        scope={scope}
+        path={path}
+        range={{ min, max }}
+        modulationCapture={modulationCapture}
+        modulators={modulators}
+        onModulationTarget={onModulationTarget}
+      />
     </label>
   );
 }
@@ -1576,8 +2214,10 @@ function NumberControl({
   selectedEvent,
   lockCapture,
   modulationCapture,
+  modulators,
   voice,
   onParameter,
+  onModulationTarget,
   min = 0,
   max = 1,
   boolean,
@@ -1588,6 +2228,13 @@ function NumberControl({
       <label className={controlClass(scope, path, selectedEvent, lockCapture, modulationCapture, voice)}>
         <span>{label}</span>
         <input type="checkbox" checked={rawValue === true} onChange={(event) => onParameter(path, event.target.checked)} />
+        <ModTargetOverlay
+          scope={scope}
+          path={path}
+          modulationCapture={modulationCapture}
+          modulators={modulators}
+          onModulationTarget={onModulationTarget}
+        />
       </label>
     );
   }
@@ -1596,6 +2243,14 @@ function NumberControl({
     <label className={controlClass(scope, path, selectedEvent, lockCapture, modulationCapture, voice)}>
       <span>{label}</span>
       <input type="number" min={min} max={max} value={Number(rawValue ?? 0)} onChange={(event) => onParameter(path, Number(event.target.value))} />
+      <ModTargetOverlay
+        scope={scope}
+        path={path}
+        range={{ min, max }}
+        modulationCapture={modulationCapture}
+        modulators={modulators}
+        onModulationTarget={onModulationTarget}
+      />
     </label>
   );
 }
@@ -1608,22 +2263,106 @@ function TextControl({
   selectedEvent,
   lockCapture,
   modulationCapture,
+  modulators,
   voice,
   onParameter,
+  onModulationTarget,
 }: ControlProps) {
   return (
     <label className={controlClass(scope, path, selectedEvent, lockCapture, modulationCapture, voice)}>
       <span>{label}</span>
       <input value={String(getNestedParameter(target, path) ?? "")} onChange={(event) => onParameter(path, event.target.value)} />
+      <ModTargetOverlay
+        scope={scope}
+        path={path}
+        modulationCapture={modulationCapture}
+        modulators={modulators}
+        onModulationTarget={onModulationTarget}
+      />
     </label>
   );
 }
 
-interface ControlProps extends Pick<DeviceEditorProps, "voice" | "selectedEvent" | "lockCapture" | "modulationCapture" | "onParameter"> {
+function SelectControl({
+  label,
+  path,
+  target,
+  scope,
+  selectedEvent,
+  lockCapture,
+  modulationCapture,
+  modulators,
+  voice,
+  onParameter,
+  onModulationTarget,
+  options,
+}: ControlProps & { options: Array<{ value: string; label: string }> }) {
+  return (
+    <label className={controlClass(scope, path, selectedEvent, lockCapture, modulationCapture, voice)}>
+      <span>{label}</span>
+      <select value={String(getNestedParameter(target, path) ?? options[0]?.value ?? "")} onChange={(event) => onParameter(path, event.target.value)}>
+        {options.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+      </select>
+      <ModTargetOverlay
+        scope={scope}
+        path={path}
+        modulationCapture={modulationCapture}
+        modulators={modulators}
+        onModulationTarget={onModulationTarget}
+      />
+    </label>
+  );
+}
+
+interface ControlProps extends Pick<DeviceEditorProps, "voice" | "selectedEvent" | "lockCapture" | "modulationCapture" | "modulators" | "onParameter" | "onModulationTarget"> {
   label: string;
   path: string;
   target: ParameterBag;
   scope: LockScope;
+}
+
+function ModTargetOverlay({
+  scope,
+  path,
+  modulationCapture,
+  modulators,
+  onModulationTarget,
+  range,
+}: {
+  scope: LockScope;
+  path: string;
+  modulationCapture: ModulationCapture | null;
+  modulators: ModulatorDraft[];
+  onModulationTarget: (path: string, amount: number, range?: { min: number; max: number }) => void;
+  range?: { min: number; max: number };
+}) {
+  if (modulationCapture?.device !== scope) {
+    return null;
+  }
+
+  const amount = modulators[modulationCapture.modulator]?.amount ?? 0.25;
+  return (
+    <div className="mod-target-overlay">
+      <span>M{modulationCapture.modulator + 1}</span>
+      <input
+        aria-label={`Set modulation amount for ${path}`}
+        type="range"
+        min={-1}
+        max={1}
+        step={0.01}
+        defaultValue={amount}
+        onChange={(event) => onModulationTarget(path, Number(event.target.value), range)}
+      />
+      <button type="button" onClick={() => onModulationTarget(path, amount, range)}>Set</button>
+    </div>
+  );
+}
+
+function formatControlValue(value: number, suffix: string): string {
+  if (suffix.length > 0) {
+    return `${Math.round(value)}${suffix}`;
+  }
+  return value.toFixed(2);
 }
 
 function controlClass(
@@ -1654,6 +2393,32 @@ function NumberField({ label, value, min, max, onChange }: { label: string; valu
   );
 }
 
+function RangeField({
+  label,
+  value,
+  min,
+  max,
+  step,
+  suffix = "",
+  onChange,
+}: {
+  label: string;
+  value: number;
+  min: number;
+  max: number;
+  step: number;
+  suffix?: string;
+  onChange: (value: number) => void;
+}) {
+  return (
+    <label className="number-field range-field">
+      <span>{label}</span>
+      <input type="range" min={min} max={max} step={step} value={value} onChange={(event) => onChange(Number(event.target.value))} />
+      <strong>{Math.round(value)}{suffix}</strong>
+    </label>
+  );
+}
+
 function Toggle({ label, checked, onChange }: { label: string; checked: boolean; onChange: (checked: boolean) => void }) {
   return (
     <label className="toggle">
@@ -1671,8 +2436,8 @@ function ValidationPanel({ validation }: { validation: { errors: string[]; warni
         <p className="ok-line"><CheckCircle2 size={16} />Package valid</p>
       ) : (
         <>
-          {validation.errors.map((error) => <p key={error} className="error-text"><AlertTriangle size={14} />{error}</p>)}
-          {validation.warnings.map((warning) => <p key={warning} className="warning-text"><AlertTriangle size={14} />{warning}</p>)}
+          {validation.errors.map((error, index) => <p key={`error:${index}:${error}`} className="error-text"><AlertTriangle size={14} />{error}</p>)}
+          {validation.warnings.map((warning, index) => <p key={`warning:${index}:${warning}`} className="warning-text"><AlertTriangle size={14} />{warning}</p>)}
         </>
       )}
     </section>
@@ -1683,6 +2448,58 @@ function StatusBadge({ errors, warnings }: { errors: number; warnings: number })
   if (errors > 0) return <span className="status-badge error">{errors} errors</span>;
   if (warnings > 0) return <span className="status-badge warning">{warnings} warnings</span>;
   return <span className="status-badge ok">valid</span>;
+}
+
+function schedulePatternStep(context: AudioContext, voice: ProgramVoice, step: number, startAt: number): void {
+  const stepEvent = findStepEvent(voice, step);
+  if (stepEvent?.instrumentTrigger?.enabled !== true || voice.instrument.type !== "polySh101") return;
+  const parameters = applyParameterLocks(voice.instrument.defaults, stepEvent.parameterLocks?.instrument);
+  playPolySh101Event(context, startAt, parameters, stepEvent.instrumentTrigger.durationMs);
+}
+
+function getPatternStepMs(voice: ProgramVoice): number {
+  return (60_000 / voice.pattern.tempoBpm) * voice.pattern.stepDurationBeats;
+}
+
+function pitchToMidiNumber(pitch: string): number {
+  const match = pitch.match(/^([A-G](?:#|b)?)(-?\d+)$/);
+  if (match === null) return 48;
+  const semitones: Record<string, number> = {
+    C: 0,
+    "C#": 1,
+    Db: 1,
+    D: 2,
+    "D#": 3,
+    Eb: 3,
+    E: 4,
+    F: 5,
+    "F#": 6,
+    Gb: 6,
+    G: 7,
+    "G#": 8,
+    Ab: 8,
+    A: 9,
+    "A#": 10,
+    Bb: 10,
+    B: 11,
+  };
+  const [, note = "C", octaveText = "3"] = match;
+  return (Number(octaveText) + 1) * 12 + (semitones[note] ?? 0);
+}
+
+function midiToPitch(midi: number): string {
+  const names = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
+  const note = names[midi % 12] ?? "C";
+  const octave = Math.floor(midi / 12) - 1;
+  return `${note}${octave}`;
+}
+
+function getLockedPitchSet(event: StepEvent | undefined): Set<string> {
+  const pitches = event?.parameterLocks?.instrument?.pitches;
+  if (!Array.isArray(pitches)) {
+    return new Set();
+  }
+  return new Set(pitches.filter((value): value is string => typeof value === "string"));
 }
 
 function completionLabel(completion: ProgramCompletion): string {
@@ -1730,7 +2547,7 @@ async function createAssetFromFile(file: File): Promise<ImportedAsset> {
 
 async function readAudioDurationMs(file: File): Promise<number | undefined> {
   try {
-    const context = new AudioContext();
+    const context = createAudioContext();
     const arrayBuffer = await file.arrayBuffer();
     const decoded = await context.decodeAudioData(arrayBuffer.slice(0));
     await context.close();
@@ -1773,6 +2590,13 @@ function blobToDataUrl(blob: Blob): Promise<string> {
 async function dataUrlToArrayBuffer(dataUrl: string): Promise<ArrayBuffer> {
   const response = await fetch(dataUrl);
   return response.arrayBuffer();
+}
+
+async function sha256Blob(blob: Blob): Promise<string> {
+  const digest = await crypto.subtle.digest("SHA-256", await blob.arrayBuffer());
+  return [...new Uint8Array(digest)]
+    .map((byte) => byte.toString(16).padStart(2, "0"))
+    .join("");
 }
 
 function ensureEmbeddedAssets(composition: Composition): Record<string, EmbeddedAssetPayload> {

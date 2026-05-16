@@ -22,6 +22,12 @@ body {
     #10100e;
 }
 
+@media (max-width: 780px) {
+  body {
+    min-width: 0;
+  }
+}
+
 button,
 input,
 select,
@@ -47,6 +53,11 @@ button {
 
 button:hover {
   border-color: rgba(242, 211, 93, 0.62);
+}
+
+button:disabled {
+  cursor: not-allowed;
+  opacity: 0.52;
 }
 
 input,
@@ -177,6 +188,10 @@ td {
   grid-template-columns: 300px minmax(0, 1fr) 390px;
 }
 
+.distance-top-grid {
+  grid-template-columns: 300px minmax(0, 1fr) 420px;
+}
+
 .main-grid {
   grid-template-columns: minmax(0, 1.45fr) minmax(360px, 0.55fr);
 }
@@ -185,11 +200,137 @@ td {
   grid-template-columns: minmax(0, 1.25fr) 360px;
 }
 
+.distance-main-grid {
+  grid-template-columns: minmax(360px, 0.8fr) minmax(0, 1.2fr);
+}
+
+.distance-bottom-grid {
+  grid-template-columns: 420px minmax(0, 1fr);
+}
+
 .panel {
   border: 1px solid rgba(255, 255, 255, 0.11);
   border-radius: 8px;
   padding: 1rem;
   background: #191712;
+}
+
+.server-status {
+  margin: 0.7rem 0 0;
+  color: #d8d1c4;
+  font-size: 0.84rem;
+}
+
+.scan-progress {
+  display: grid;
+  grid-template-columns: 76px minmax(0, 1fr);
+  gap: 0.85rem;
+  align-items: center;
+  margin-top: 1rem;
+  border: 1px solid rgba(242, 211, 93, 0.2);
+  border-radius: 8px;
+  padding: 0.85rem;
+  background: rgba(242, 211, 93, 0.06);
+}
+
+.scan-progress strong {
+  display: block;
+  margin-bottom: 0.2rem;
+  color: #f4f0e8;
+}
+
+.scan-progress p {
+  margin: 0;
+  color: #bfb8aa;
+  font-size: 0.84rem;
+}
+
+.progress-ring {
+  display: grid;
+  place-items: center;
+  width: 68px;
+  height: 68px;
+  border-radius: 50%;
+  background:
+    radial-gradient(circle at center, #191712 58%, transparent 60%),
+    conic-gradient(#f2d35d calc(var(--progress) * 1%), rgba(255, 255, 255, 0.12) 0);
+}
+
+.progress-ring span {
+  color: #f2d35d;
+  font-size: 0.78rem;
+  font-weight: 950;
+}
+
+.distance-readout {
+  display: grid;
+  gap: 0.35rem;
+  margin-top: 1rem;
+  border: 1px solid rgba(242, 211, 93, 0.28);
+  border-radius: 8px;
+  padding: 1rem;
+  background: rgba(242, 211, 93, 0.08);
+}
+
+.distance-readout span {
+  color: #bfb8aa;
+  font-size: 0.75rem;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.distance-readout strong {
+  color: #f2d35d;
+  font-size: 2.4rem;
+  line-height: 1;
+}
+
+.device-shell {
+  display: grid;
+  place-items: center;
+  min-height: 100vh;
+  padding: 1rem;
+}
+
+.device-client-panel {
+  width: min(100%, 520px);
+}
+
+.device-client-panel h1 {
+  margin: 0 0 1rem;
+  color: #f4f0e8;
+  font-size: clamp(2rem, 12vw, 4rem);
+  line-height: 0.95;
+}
+
+.device-ready-banner,
+.device-warning {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  margin-bottom: 0.85rem;
+  border-radius: 8px;
+  padding: 0.75rem;
+  font-size: 0.86rem;
+  font-weight: 850;
+}
+
+.device-ready-banner {
+  border: 1px solid rgba(111, 212, 120, 0.24);
+  background: rgba(111, 212, 120, 0.1);
+  color: #a7f3a0;
+}
+
+.device-warning {
+  border: 1px solid rgba(255, 105, 97, 0.32);
+  background: rgba(255, 105, 97, 0.1);
+  color: #ffccc7;
+}
+
+.device-join-button {
+  width: 100%;
+  min-height: 46px;
+  margin-top: 0.85rem;
 }
 
 .join-panel img {
@@ -211,6 +352,10 @@ td {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 0.7rem;
+}
+
+.device-client-panel .metric-row {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
 .profile-grid {
@@ -352,4 +497,43 @@ td {
 
 .notes-panel textarea {
   line-height: 1.45;
+}
+
+@media (max-width: 780px) {
+  .lab-shell {
+    padding: 0.75rem;
+  }
+
+  .lab-header,
+  .header-actions {
+    display: grid;
+    align-items: stretch;
+  }
+
+  .session-name {
+    min-height: 46px;
+    font-size: 2.1rem;
+  }
+
+  .top-grid,
+  .main-grid,
+  .bottom-grid,
+  .distance-top-grid,
+  .distance-main-grid,
+  .distance-bottom-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .device-shell {
+    place-items: start center;
+    padding: 0.75rem;
+  }
+
+  .device-client-panel {
+    width: 100%;
+  }
+
+  .device-client-panel .metric-row {
+    grid-template-columns: 1fr 1fr;
+  }
 }

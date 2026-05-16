@@ -6,7 +6,7 @@ Build out Herd from the durable specs into a fuller app, continuing beyond the r
 
 ## Current Recommendation
 
-Continue from the authoring/composition, sampler rehearsal, local package, positioning-lab, and creator-persistence scaffold milestone into account/session integration and real-device validation. The app can now create authored Compositions, package local media in `.herd.zip` archives, import those packages, launch them into rehearsal sessions, play authored sampler zones in the Participant runtime, edit modulation routes in the authoring UI, create creator Composition/package records through memory or Postgres-backed server storage, and run a standalone simulated Sonic Positioning Lab workflow.
+Continue from the authoring/composition, sampler rehearsal, local package, positioning-lab, creator-persistence, auth/session, and deployment scaffold milestone into live credential verification and real-device validation. The app can now create authored Compositions, package local media in `.herd.zip` archives, import those packages, launch them into rehearsal sessions, play authored sampler zones in the Participant runtime, edit modulation routes in the authoring UI, authenticate Authors/Hosts with magic links, create creator Composition/package records through memory or Postgres-backed server storage, confirm signed package uploads, expose signed downloads, serve built apps from the Node server, and run a standalone simulated Sonic Positioning Lab workflow.
 
 ## Completed Phases
 
@@ -20,12 +20,13 @@ Continue from the authoring/composition, sampler rehearsal, local package, posit
 - Durable local package workflow: Authoring exports `.herd.zip` archives containing `composition.json` plus media files, imports the same archive format, rehydrates local media for rehearsal, and round-trips packages into Host/Participant sessions.
 - Richer modulation route editing: Authoring exposes captured modulation routes with source selection, enable/disable, amount, range min/max, invalid-target flags, and route deletion for Instrument and Visualizer controls.
 - Creator persistence/package scaffold: Server exposes creator Composition/package endpoints backed by a local in-memory store or Postgres when `DATABASE_URL` is configured, includes an initial migration runner and Postgres migration for users/Compositions/Packages, exposes deployment health/readiness/version endpoints, and can generate Tigris-compatible signed package upload URLs when object-storage secrets are configured.
+- Production foundation: Server exposes Resend/dev magic-link auth, signed HttpOnly sessions, authenticated creator ownership, package upload confirmation/download URLs, expanded Postgres migration tables, richer health/readiness/version checks, same-origin static app serving, Docker/Fly scaffolding, CI/deploy workflow, and smoke-test script.
 - Sonic Positioning Lab prototype: standalone controller app with session QR, device labels/roles, chirp profiles, simulated scan measurements, approximate relative layout preview, operator notes, and JSON evidence export.
 
 ## Active Phase
 
 - Durable backend integration and real-device validation:
-  - Wire email magic-link auth for Author/Host accounts once the email provider is chosen.
+  - Configure production secrets and verify Resend magic-link delivery in staging.
   - Configure and verify Tigris package upload/download in a deployed environment.
   - Replace simulated lab measurements with real chirp emission, microphone capture, cross-correlation, and upload flow.
   - Validate mobile timing, sample-rate behavior, mic permission UX, and acoustic robustness on physical iOS/Android devices.
@@ -39,23 +40,24 @@ Continue from the authoring/composition, sampler rehearsal, local package, posit
 - Durable local `.herd.zip` package export/import.
 - Richer authoring modulation route UI.
 - Creator Composition/package API scaffold with memory/Postgres store selection, migration runner, Postgres migration, deployment health endpoints, and Tigris signed upload URL utility.
+- Magic-link auth/account sessions, authenticated creator APIs, package upload confirmation/download URLs, deployment scaffolding, and production static app serving.
 - Simulated Sonic Positioning Lab prototype.
 
 ## Next Phase
 
-- Tigris upload verification and magic-link account sessions, then real-device Sonic Positioning Lab client/protocol work gated by physical-device testing.
+- Staging credential verification for Resend/Tigris/Fly, then real-device Sonic Positioning Lab client/protocol work gated by physical-device testing.
 
 ## Blocked Items
 
 - Public deployment readiness and legal/signage review remain outside the current implementation phase.
 - Actual Tigris upload/download verification requires real Tigris credentials and environment configuration.
-- Magic-link delivery requires an email provider decision and provider secrets.
+- Production magic-link delivery requires Resend provider secrets and staging verification.
 - Acoustic positioning accuracy, microphone capture behavior, and real-device mobile timing require physical iOS/Android devices in a real room before they can be called complete.
 
 ## Deferred Items
 
 - Runtime modulation routing depth beyond captured target amount/range editing.
-- Account sessions and account asset libraries beyond the creator persistence scaffold. Storage provider decision: use Tigris for backend object/package storage.
+- Account asset libraries beyond authenticated Composition/package records. Storage provider decision: use Tigris for backend object/package storage.
 - Public package storage and account-scoped asset libraries. Storage provider decision: use Tigris for package/media assets.
 - Production acoustic-positioning solver and robust real measurement pipeline.
 
@@ -74,4 +76,4 @@ Continue from the authoring/composition, sampler rehearsal, local package, posit
 
 ## Next Intended Action
 
-Implement account sessions where possible without live provider credentials; configure Tigris and magic-link delivery once secrets/provider choices are available; then run real-device positioning and mobile timing validation.
+Provision staging secrets, run migrations and smoke tests on Fly, verify real Resend/Tigris upload/download, then implement and validate real-device positioning and mobile timing.

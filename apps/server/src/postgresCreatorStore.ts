@@ -3,6 +3,7 @@ import pg from "pg";
 import type { PoolClient } from "pg";
 import type {
   CompositionRecord,
+  ConfirmPackageUploadInput,
   CreatorRepository,
   CreatePackageInput,
   PackageRecord,
@@ -32,6 +33,10 @@ interface PackageRow {
   version: number;
   tigris_object_key: string;
   status: "pendingUpload" | "ready";
+  content_type: string | null;
+  size_bytes: number | null;
+  sha256: string | null;
+  upload_confirmed_at: Date | null;
   created_at: Date;
   updated_at: Date;
 }
@@ -111,6 +116,10 @@ export class PostgresCreatorStore implements CreatorRepository {
             version,
             tigris_object_key,
             status,
+            content_type,
+            size_bytes,
+            sha256,
+            upload_confirmed_at,
             created_at,
             updated_at
           )
@@ -163,6 +172,10 @@ export class PostgresCreatorStore implements CreatorRepository {
           p.version,
           p.tigris_object_key,
           p.status,
+          p.content_type,
+          p.size_bytes,
+          p.sha256,
+          p.upload_confirmed_at,
           p.created_at,
           p.updated_at
         FROM packages p
@@ -174,6 +187,84 @@ export class PostgresCreatorStore implements CreatorRepository {
     );
 
     return result.rows.map(mapPackageRow);
+  }
+
+  async getPackage(ownerEmail: string, packageId: string): Promise<PackageRecord | null> {
+    const normalized = normalizeOwnerEmail(ownerEmail);
+    const result = await this.pool.query<PackageRow>(
+      `
+        SELECT
+          p.id,
+          u.email,
+          p.composition_record_id,
+          p.composition_id,
+          p.name,
+          p.version,
+          p.tigris_object_key,
+          p.status,
+          p.content_type,
+          p.size_bytes,
+          p.sha256,
+          p.upload_confirmed_at,
+          p.created_at,
+          p.updated_at
+        FROM packages p
+        JOIN users u ON u.id = p.owner_user_id
+        WHERE u.email = $1 AND p.id = $2
+      `,
+      [normalized, packageId],
+    );
+
+    return result.rows[0] === undefined ? null : mapPackageRow(result.rows[0]);
+  }
+
+  async confirmPackageUpload(input: ConfirmPackageUploadInput, now = Date.now()): Promise<PackageRecord> {
+    const ownerEmail = normalizeOwnerEmail(input.ownerEmail);
+    const result = await this.pool.query<PackageRow>(
+      `
+        UPDATE packages p
+        SET
+          status = 'ready',
+          content_type = $3,
+          size_bytes = $4,
+          sha256 = $5,
+          upload_confirmed_at = $6,
+          updated_at = $6
+        FROM users u
+        WHERE p.owner_user_id = u.id
+          AND u.email = $1
+          AND p.id = $2
+        RETURNING
+          p.id,
+          u.email,
+          p.composition_record_id,
+          p.composition_id,
+          p.name,
+          p.version,
+          p.tigris_object_key,
+          p.status,
+          p.content_type,
+          p.size_bytes,
+          p.sha256,
+          p.upload_confirmed_at,
+          p.created_at,
+          p.updated_at
+      `,
+      [
+        ownerEmail,
+        input.packageId,
+        input.contentType,
+        input.sizeBytes,
+        input.sha256,
+        new Date(now),
+      ],
+    );
+
+    if (result.rows[0] === undefined) {
+      throw new Error(`Package "${input.packageId}" was not found.`);
+    }
+
+    return mapPackageRow(result.rows[0]);
   }
 }
 
@@ -254,7 +345,7 @@ function mapCompositionRow(row: CompositionRow): CompositionRecord {
 }
 
 function mapPackageRow(row: PackageRow): PackageRecord {
-  return {
+  const record: PackageRecord = {
     id: row.id,
     ownerEmail: row.email,
     compositionRecordId: row.composition_record_id,
@@ -266,6 +357,13 @@ function mapPackageRow(row: PackageRow): PackageRecord {
     createdAt: row.created_at.getTime(),
     updatedAt: row.updated_at.getTime(),
   };
+
+  if (row.content_type !== null) record.contentType = row.content_type;
+  if (row.size_bytes !== null) record.sizeBytes = Number(row.size_bytes);
+  if (row.sha256 !== null) record.sha256 = row.sha256;
+  if (row.upload_confirmed_at !== null) record.uploadConfirmedAt = row.upload_confirmed_at.getTime();
+
+  return record;
 }
 
 function userIdForEmail(ownerEmail: string): string {

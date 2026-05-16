@@ -1,0 +1,33 @@
+app = "herd-production"
+primary_region = "sjc"
+kill_signal = "SIGTERM"
+kill_timeout = "30s"
+
+[build]
+  dockerfile = "Dockerfile"
+
+[env]
+  NODE_ENV = "production"
+  PORT = "8080"
+  HERD_STATIC_ROOT = "/app"
+
+[deploy]
+  release_command = "/bin/sh -lc 'pnpm --filter @herd/server db:migrate'"
+  release_command_timeout = "10m"
+  strategy = "rolling"
+
+[http_service]
+  internal_port = 8080
+  force_https = true
+  auto_stop_machines = "off"
+  auto_start_machines = false
+
+  [http_service.http_options]
+    idle_timeout = 600
+
+  [[http_service.checks]]
+    grace_period = "10s"
+    interval = "30s"
+    method = "GET"
+    timeout = "5s"
+    path = "/healthz"

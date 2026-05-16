@@ -138,11 +138,14 @@ First persistence target:
 Current implementation scaffold:
 
 - Authoring can save Compositions and create package records through local server endpoints.
-- The server uses an in-memory creator store for local development and switches to a Postgres-backed creator store when `DATABASE_URL` is configured.
+- Authoring can authenticate with email magic links, save Compositions under the authenticated owner, and upload `.herd.zip` packages through a signed upload/confirmation flow.
+- The server uses in-memory creator/auth stores for local development and switches to Postgres-backed stores when `DATABASE_URL` is configured.
 - `apps/server/migrations/001_creator_storage.sql` defines the first Postgres schema for users, Compositions, and Packages.
+- `apps/server/migrations/002_auth_and_runtime.sql` adds auth tokens/sessions, package upload metadata, Performance/session recovery tables, event logs, health reports, and positioning scan exports.
 - `pnpm --filter @herd/server db:migrate` runs unapplied SQL migrations with `DIRECT_DATABASE_URL` or `DATABASE_URL`.
-- Tigris-compatible signed upload URL generation is available when object-storage environment variables are present.
-- Email magic-link account sessions and deployed Tigris verification are still pending.
+- Tigris-compatible signed upload, upload confirmation, and signed download URL generation are available when object-storage environment variables are present.
+- Resend-backed magic-link delivery is available when `RESEND_API_KEY` is configured; local/dev mode logs a verify link instead.
+- Deployed Resend/Tigris verification is still pending.
 
 ## Postgres Usage
 

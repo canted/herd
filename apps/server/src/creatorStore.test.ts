@@ -31,6 +31,28 @@ describe("CreatorStore", () => {
     expect(store.listPackages("author@example.com")).toEqual([second, first]);
   });
 
+  it("confirms Package uploads with immutable metadata", () => {
+    const store = new CreatorStore();
+    const created = store.createPackage({ ownerEmail: "author@example.com", composition }, 1000);
+    const ready = store.confirmPackageUpload({
+      ownerEmail: "author@example.com",
+      packageId: created.id,
+      contentType: "application/zip",
+      sizeBytes: 2048,
+      sha256: "a".repeat(64),
+    }, 2000);
+
+    expect(ready).toMatchObject({
+      id: created.id,
+      status: "ready",
+      contentType: "application/zip",
+      sizeBytes: 2048,
+      sha256: "a".repeat(64),
+      uploadConfirmedAt: 2000,
+    });
+    expect(store.getPackage("author@example.com", created.id)?.status).toBe("ready");
+  });
+
   it("validates owner emails", () => {
     expect(() => normalizeOwnerEmail("not an email")).toThrow("A valid owner email is required.");
   });

@@ -2,6 +2,7 @@ export type DeviceRole = "beacon" | "listener" | "backupBeacon" | "observer";
 export type MicStatus = "n/a" | "unknown" | "granted" | "denied";
 export type Readiness = "ready" | "warning" | "blocked";
 export type PositionState = "fresh" | "stale" | "unlocated";
+export type PositioningSignalKind = "chirp" | "codedNoise";
 
 export interface ChirpProfile {
   id: string;
@@ -13,6 +14,11 @@ export interface ChirpProfile {
   gain: number;
   threshold: number;
   repeats: number;
+  signal?: PositioningSignalKind;
+  code?: string;
+  chipMs?: number;
+  burstMs?: number;
+  seed?: number;
 }
 
 export interface LabDevice {
@@ -59,6 +65,33 @@ export interface ScanResult {
 
 export const chirpProfiles: ChirpProfile[] = [
   {
+    id: "coded-ultrasonic-noise",
+    label: "Coded ultrasonic noise",
+    band: "2-21 kHz",
+    durationMs: 640,
+    slotMs: 860,
+    guardMs: 220,
+    gain: 0.28,
+    threshold: 0.22,
+    repeats: 1,
+    signal: "codedNoise",
+    code: "10110100101110010110",
+    chipMs: 32,
+    burstMs: 14,
+    seed: 21_000,
+  },
+  {
+    id: "audible-diagnostic",
+    label: "Audible diagnostic",
+    band: "700 Hz-2.8 kHz",
+    durationMs: 520,
+    slotMs: 720,
+    guardMs: 220,
+    gain: 0.85,
+    threshold: 0.18,
+    repeats: 2,
+  },
+  {
     id: "audible-short",
     label: "Audible short",
     band: "1.4-4.2 kHz",
@@ -83,7 +116,7 @@ export const chirpProfiles: ChirpProfile[] = [
   {
     id: "near-ultrasonic-test",
     label: "Near-ultrasonic test",
-    band: "16-19 kHz",
+    band: "21 kHz",
     durationMs: 120,
     slotMs: 240,
     guardMs: 140,
@@ -115,6 +148,154 @@ export const chirpProfiles: ChirpProfile[] = [
   },
 ];
 
+export function parseFrequencyBand(band: string): [number, number] {
+  const matches = [...band.matchAll(/([\d.]+)\s*(kHz|Hz)?/gi)];
+  if (matches.length === 0) {
+    return [1200, 5800];
+  }
+
+  const tokens = matches.map((match) => ({
+    value: Number(match[1]),
+    unit: match[2]?.toLowerCase() as "khz" | "hz" | undefined,
+  }));
+  const values = tokens.map((token, index) => {
+    const unit = token.unit ?? tokens[index + 1]?.unit ?? tokens[index - 1]?.unit ?? "hz";
+    return unit === "khz" ? token.value * 1000 : token.value;
+  });
+  const startHz = values[0] ?? 1200;
+  return [startHz, values[1] ?? startHz];
+}
+
+export function createPositioningSignalSamples(sampleRate: number, profile: ChirpProfile): Float32Array {
+  if (profile.signal === "codedNoise") {
+    return createCodedNoiseSamples(sampleRate, profile);
+  }
+  return createChirpBurstSamples(sampleRate, profile);
+}
+
+function createChirpBurstSamples(sampleRate: number, profile: ChirpProfile): Float32Array {
+  const chirp = createChirpSamples(sampleRate, profile);
+  const repeats = Math.max(1, profile.repeats);
+  const totalSamples = Math.max(
+    chirp.length,
+    Math.round((((repeats - 1) * profile.slotMs + profile.durationMs) / 1000) * sampleRate),
+  );
+  const burst = new Float32Array(totalSamples);
+  for (let repeat = 0; repeat < repeats; repeat += 1) {
+    const offset = Math.round(((repeat * profile.slotMs) / 1000) * sampleRate);
+    for (let index = 0; index < chirp.length && offset + index < burst.length; index += 1) {
+      const target = offset + index;
+      burst[target] = (burst[target] ?? 0) + (chirp[index] ?? 0);
+    }
+  }
+  return burst;
+}
+
+function createChirpSamples(sampleRate: number, profile: ChirpProfile): Float32Array {
+  const [startHz, endHz] = parseFrequencyBand(profile.band);
+  const durationSeconds = profile.durationMs / 1000;
+  const sampleCount = Math.max(1, Math.round(durationSeconds * sampleRate));
+  const samples = new Float32Array(sampleCount);
+  for (let index = 0; index < sampleCount; index += 1) {
+    const t = index / sampleRate;
+    const progress = index / Math.max(1, sampleCount - 1);
+    const phase = 2 * Math.PI * (startHz * t + ((endHz - startHz) / (2 * durationSeconds)) * t * t);
+    const windowValue = Math.sin(Math.PI * progress);
+    samples[index] = Math.sin(phase) * windowValue;
+  }
+  return samples;
+}
+
+function createCodedNoiseSamples(sampleRate: number, profile: ChirpProfile): Float32Array {
+  const code = normalizeCode(profile.code);
+  const chipMs = Math.max(1, profile.chipMs ?? 32);
+  const burstMs = Math.min(chipMs, Math.max(1, profile.burstMs ?? 14));
+  const durationMs = Math.max(profile.durationMs, code.length * chipMs);
+  const chipSamples = Math.max(1, Math.round((chipMs / 1000) * sampleRate));
+  const burstSamples = Math.max(1, Math.round((burstMs / 1000) * sampleRate));
+  const sampleCount = Math.max(1, Math.round((durationMs / 1000) * sampleRate));
+  const samples = new Float32Array(sampleCount);
+  const [bandStartHz, bandEndHz] = parseFrequencyBand(profile.band);
+  const [lowHz, highHz] = clampBandToNyquist(Math.min(bandStartHz, bandEndHz), Math.max(bandStartHz, bandEndHz), sampleRate);
+  const tones = createNoiseTones(profile.seed ?? hashString(profile.id), lowHz, highHz, 24);
+
+  for (let chipIndex = 0; chipIndex < code.length; chipIndex += 1) {
+    if (code[chipIndex] !== "1") continue;
+
+    const offset = chipIndex * chipSamples;
+    for (let index = 0; index < burstSamples && offset + index < samples.length; index += 1) {
+      const target = offset + index;
+      const t = target / sampleRate;
+      const progress = index / Math.max(1, burstSamples - 1);
+      const windowValue = Math.sin(Math.PI * progress);
+      let value = 0;
+      for (const tone of tones) {
+        value += tone.amplitude * Math.sin(2 * Math.PI * tone.frequencyHz * t + tone.phase);
+      }
+      samples[target] = (samples[target] ?? 0) + (value / Math.sqrt(tones.length)) * windowValue;
+    }
+  }
+
+  normalizeSamples(samples);
+  return samples;
+}
+
+function normalizeCode(code: string | undefined): string {
+  const normalized = code?.replace(/[^01]/g, "") ?? "";
+  return normalized.length > 0 ? normalized : "10110100101110010110";
+}
+
+function clampBandToNyquist(lowHz: number, highHz: number, sampleRate: number): [number, number] {
+  const nyquist = sampleRate / 2;
+  const clampedHigh = Math.min(highHz, Math.max(400, nyquist - 250));
+  const clampedLow = Math.min(lowHz, clampedHigh - 180);
+  return [Math.max(80, clampedLow), Math.max(81, clampedHigh)];
+}
+
+function createNoiseTones(seed: number, lowHz: number, highHz: number, count: number): Array<{ frequencyHz: number; phase: number; amplitude: number }> {
+  const random = createSeededRandom(seed);
+  return Array.from({ length: count }, (_, index) => {
+    const bandPosition = (index + 0.25 + random() * 0.5) / count;
+    return {
+      frequencyHz: lowHz + (highHz - lowHz) * bandPosition,
+      phase: random() * Math.PI * 2,
+      amplitude: 0.72 + random() * 0.56,
+    };
+  });
+}
+
+function normalizeSamples(samples: Float32Array): void {
+  let peak = 0;
+  for (const sample of samples) {
+    peak = Math.max(peak, Math.abs(sample));
+  }
+  if (peak <= 0) return;
+  const scale = 1 / peak;
+  for (let index = 0; index < samples.length; index += 1) {
+    samples[index] = (samples[index] ?? 0) * scale;
+  }
+}
+
+function hashString(input: string): number {
+  let hash = 2166136261;
+  for (let index = 0; index < input.length; index += 1) {
+    hash ^= input.charCodeAt(index);
+    hash = Math.imul(hash, 16777619);
+  }
+  return hash >>> 0;
+}
+
+function createSeededRandom(seed: number): () => number {
+  let state = seed >>> 0;
+  return () => {
+    state += 0x6D2B79F5;
+    let value = state;
+    value = Math.imul(value ^ (value >>> 15), value | 1);
+    value ^= value + Math.imul(value ^ (value >>> 7), value | 61);
+    return ((value ^ (value >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
 export function createDefaultDevices(): LabDevice[] {
   return [
     createDevice("north wall", "beacon", 0.12, 0.18, 48_000),
@@ -132,8 +313,9 @@ export function createDevice(
   y = 0.5,
   sampleRate = 48_000,
 ): LabDevice {
+  const slug = label.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
   return {
-    id: `device-${label.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || crypto.randomUUID()}`,
+    id: `device-${slug || createCompatId()}`,
     label,
     role,
     audio: role === "observer" ? "warning" : "ready",
@@ -143,6 +325,21 @@ export function createDevice(
     x,
     y,
   };
+}
+
+function createCompatId(): string {
+  const randomUUID = globalThis.crypto?.randomUUID;
+  if (typeof randomUUID === "function") {
+    return randomUUID.call(globalThis.crypto);
+  }
+
+  const bytes = new Uint8Array(8);
+  if (typeof globalThis.crypto?.getRandomValues === "function") {
+    globalThis.crypto.getRandomValues(bytes);
+    return [...bytes].map((byte) => byte.toString(16).padStart(2, "0")).join("");
+  }
+
+  return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
 }
 
 export function runSimulatedScan(

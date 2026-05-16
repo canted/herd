@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
+import { GetObjectCommand, PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 
 export interface TigrisStorageConfig {
@@ -78,6 +78,39 @@ export async function createPackageUploadUrl({
     }),
     { expiresIn: expiresInSeconds },
   );
+}
+
+export async function createPackageDownloadUrl({
+  config,
+  objectKey,
+  expiresInSeconds = 900,
+}: {
+  config: TigrisStorageConfig;
+  objectKey: string;
+  expiresInSeconds?: number;
+}): Promise<string> {
+  const client = createS3Client(config);
+
+  return getSignedUrl(
+    client,
+    new GetObjectCommand({
+      Bucket: config.bucket,
+      Key: objectKey,
+    }),
+    { expiresIn: expiresInSeconds },
+  );
+}
+
+function createS3Client(config: TigrisStorageConfig): S3Client {
+  return new S3Client({
+    endpoint: config.endpoint,
+    region: config.region,
+    credentials: {
+      accessKeyId: config.accessKeyId,
+      secretAccessKey: config.secretAccessKey,
+    },
+    forcePathStyle: false,
+  });
 }
 
 function sanitizePathSegment(value: string): string {
